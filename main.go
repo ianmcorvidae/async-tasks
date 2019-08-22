@@ -6,8 +6,6 @@ import (
 	// "net/http"
 
 	"github.com/cyverse-de/configurate"
-	"github.com/cyverse-de/dbutil"
-	_ "github.com/lib/pq"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
 )
@@ -41,22 +39,15 @@ func main() {
 	}
 
 	dburi := cfg.GetString("db.uri")
-	connector, err := dbutil.NewDefaultConnector("1m")
+
+	db, err := SetupDB(dburi)
 	if err != nil {
 		log.Fatal(err.Error())
 	}
+	defer db.db.Close()
 
-	log.Info("Connecting to the database...")
-	db, err := connector.Connect("postgres", dburi)
-	if err != nil {
-		log.Fatal(err.Error())
-	}
-	defer db.Close()
-	log.Info("Connected to the database.")
-
-	if err := db.Ping(); err != nil {
-		log.Fatal(err.Error())
-	}
-	log.Info("Successfully pinged the database")
-
+	row := db.db.QueryRow("SELECT COUNT(*) FROM async_tasks");
+	var res struct{count int}
+	row.Scan(&res)
+	log.Infof("There are %d async tasks in the database", res.count)
 }
