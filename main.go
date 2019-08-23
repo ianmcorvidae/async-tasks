@@ -3,7 +3,11 @@ package main
 import (
 	_ "expvar"
 	"flag"
-	// "net/http"
+	"fmt"
+	"strings"
+
+	"net/http"
+	"github.com/gorilla/mux"
 
 	"github.com/cyverse-de/configurate"
 	"github.com/sirupsen/logrus"
@@ -20,10 +24,27 @@ func init() {
 	logrus.SetFormatter(&logrus.JSONFormatter{})
 }
 
+func makeRouter() *mux.Router {
+	router := mux.NewRouter()
+	router.Handle("/debug/vars", http.DefaultServeMux)
+	router.HandleFunc("/", func(writer http.ResponseWriter, r *http.Request) {
+		fmt.Fprintf(writer, "Hello from async-tasks.\n")
+	}).Methods("GET")
+
+	return router
+}
+
+func fixAddr(addr string) string {
+        if !strings.HasPrefix(addr, ":") {
+                return fmt.Sprintf(":%s", addr)
+        }
+        return addr
+}
+
 func main() {
 	var (
 		cfgPath = flag.String("config", "/etc/iplant/de/async-tasks.yml", "The path to the config file")
-		// port    = flag.String("port", "60000", "The port number to listen on")
+		port    = flag.String("port", "60000", "The port number to listen on")
 		err error
 		cfg *viper.Viper
 	)
@@ -50,4 +71,9 @@ func main() {
 	var res struct{count int}
 	row.Scan(&res)
 	log.Infof("There are %d async tasks in the database", res.count)
+
+	router := makeRouter()
+
+	log.Infof("Starting to listen on port %s", *port)
+	log.Fatal(http.ListenAndServe(fixAddr(*port), router))
 }
