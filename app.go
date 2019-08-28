@@ -1,7 +1,9 @@
 package main
 
 import (
+	"context"
 	"net/http"
+	"encoding/json"
 	"github.com/gorilla/mux"
 )
 
@@ -39,11 +41,36 @@ func (a *AsyncTasksApp) GetByIdRequest(writer http.ResponseWriter, r *http.Reque
 
 	log.Infof("Fetching async task %s", id)
 
+	tx, err := a.db.BeginTx(context.TODO(), nil)
+	if err != nil {
+		errored(writer, err.Error())
+	}
+	defer tx.tx.Rollback()
+
+	task, err := tx.GetTask(id)
+	if err != nil {
+		errored(writer, err.Error())
+	}
+
+	log.Info(task)
+
+	jsoned, err := json.Marshal(task)
+	if err != nil {
+		errored(writer, err.Error())
+	}
+
+	writer.Write(jsoned)
+
 	return
 }
 
 func badRequest(writer http.ResponseWriter, msg string) {
         http.Error(writer, msg, http.StatusBadRequest)
+        log.Error(msg)
+}
+
+func errored(writer http.ResponseWriter, msg string) {
+        http.Error(writer, msg, http.StatusInternalServerError)
         log.Error(msg)
 }
 

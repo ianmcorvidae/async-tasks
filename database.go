@@ -6,6 +6,9 @@ import (
 	"database/sql"
 	"github.com/cyverse-de/dbutil"
 
+	"encoding/json"
+	"time"
+
 	_ "github.com/lib/pq"
 )
 
@@ -51,4 +54,64 @@ func (d *DBConnection) BeginTx(ctx context.Context, opts *sql.TxOptions) (*DBTx,
 		return nil, err
 	}
 	return &DBTx{tx: tx}, nil
+}
+
+// GetTask fetches a task from the database by ID
+func (t *DBTx) GetTask(id string) (*AsyncTask, error) {
+
+	query := `SELECT id, type, username, data, start_date, end_date FROM async_tasks WHERE id::text = $1`
+
+	rows, err := t.tx.Query(query, id)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var dbtask DBTask
+	for rows.Next() {
+		if err := rows.Scan(&dbtask.ID, &dbtask.Type, &dbtask.Username, &dbtask.Data, &dbtask.StartDate, &dbtask.EndDate); err != nil {
+			return nil, err
+		}
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+
+	log.Info(dbtask)
+
+	task := &AsyncTask{ID: dbtask.ID, Type: dbtask.Type}
+
+	if dbtask.Username.Valid {
+		task.Username = dbtask.Username.String
+	}
+
+	if dbtask.Data.Valid {
+		jsonData := make(map[string]interface{})
+
+		err = json.Unmarshal([]byte(dbtask.Data.String), &jsonData)
+		if err != nil {
+			return task, err
+		}
+
+		task.Data = jsonData
+	}
+
+	if dbtask.StartDate.Valid {
+		t, err := time.Parse("2006-01-02T15:04:05.000000Z", dbtask.StartDate.String)
+		if err != nil {
+			return task, err
+		}
+		task.StartDate = t
+	}
+
+	if dbtask.EndDate.Valid {
+		t, err := time.Parse("2006-01-02T15:04:05.000000Z", dbtask.EndDate.String)
+		if err != nil {
+			return task, err
+		}
+		task.EndDate = t
+	}
+
+	return task, nil
 }
