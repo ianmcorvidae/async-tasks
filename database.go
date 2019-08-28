@@ -33,7 +33,7 @@ func SetupDB(dbURI string) (*DBConnection, error) {
 		return nil, err
 	}
 
-	log.Info("Connected to the database")
+	log.Info("Created database connector")
 
 	if err = db.Ping(); err != nil {
 		return nil, err
