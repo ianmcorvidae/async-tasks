@@ -18,13 +18,17 @@ func NewAsyncTasksApp(db *DBConnection, router *mux.Router) *AsyncTasksApp {
 		router: router,
 	}
 
-	app.router.HandleFunc("/{id:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}}", app.GetByIdRequest).Methods("GET").Name("getById")
+	app.InitRoutes()
+
+	return app
+}
+
+func (a *AsyncTasksApp) InitRoutes() {
+	a.router.HandleFunc("/{id:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}}", app.GetByIdRequest).Methods("GET").Name("getById")
 	// list multiple tasks by filter
 	// post new task
 	// delete by ID
 	// put/patch (?) status, behavior, etc.
-
-	return app
 }
 
 func (a *AsyncTasksApp) GetByIdRequest(writer http.ResponseWriter, r *http.Request) {
