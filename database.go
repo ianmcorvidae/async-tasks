@@ -7,7 +7,6 @@ import (
 	"github.com/cyverse-de/dbutil"
 
 	"encoding/json"
-	"time"
 
 	_ "github.com/lib/pq"
 )
@@ -98,19 +97,11 @@ func (t *DBTx) GetTask(id string) (*AsyncTask, error) {
 	}
 
 	if dbtask.StartDate.Valid {
-		t, err := time.Parse("2006-01-02T15:04:05.000000Z", dbtask.StartDate.String)
-		if err != nil {
-			return task, err
-		}
-		task.StartDate = t
+		task.StartDate = &dbtask.StartDate.Time
 	}
 
 	if dbtask.EndDate.Valid {
-		t, err := time.Parse("2006-01-02T15:04:05.000000Z", dbtask.EndDate.String)
-		if err != nil {
-			return task, err
-		}
-		task.EndDate = t
+		task.EndDate = &dbtask.EndDate.Time
 	}
 
 	return task, nil

@@ -2,6 +2,7 @@ package main
 
 import (
 	"database/sql"
+	"github.com/lib/pq"
 	"time"
 )
 
@@ -20,8 +21,8 @@ type AsyncTask struct {
 	Type      string                 `json:"type"`
 	Username  string                 `json:"username"`
 	Data      map[string]interface{} `json:"data"`
-	StartDate time.Time              `json:"start_date"`
-	EndDate   time.Time              `json:"end_date"`
+	StartDate *time.Time             `json:"start_date"`
+	EndDate   *time.Time             `json:"end_date"`
 	Behaviors []AsyncTaskBehavior    `json:"behaviors,omitempty"`
 	Status    []AsyncTaskStatus      `json:"status,omitempty"`
 }
@@ -31,6 +32,6 @@ type DBTask struct {
 	Type      string
 	Username  sql.NullString
 	Data      sql.NullString
-	StartDate sql.NullString
-	EndDate   sql.NullString
+	StartDate pq.NullTime
+	EndDate   pq.NullTime
 }
