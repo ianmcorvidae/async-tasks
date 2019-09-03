@@ -6,16 +6,19 @@ import (
 	"time"
 )
 
+// AsyncTaskBehavior describes a single behavior from the database
 type AsyncTaskBehavior struct {
 	BehaviorType string                 `json:"type"`
 	Data         map[string]interface{} `json:"data"`
 }
 
+// AsyncTaskStatus describes a single status update from the database
 type AsyncTaskStatus struct {
 	Status      string    `json:"status"`
 	CreatedDate time.Time `json:"created_date"`
 }
 
+// AsyncTask describes an async task from the DB, including behaviors and statuses if available
 type AsyncTask struct {
 	ID        string                 `json:"id"`
 	Type      string                 `json:"type"`
@@ -27,6 +30,13 @@ type AsyncTask struct {
 	Status    []AsyncTaskStatus      `json:"status,omitempty"`
 }
 
+// DBTaskBehavior is a special type for selecting from the DB
+type DBTaskBehavior struct {
+	BehaviorType string
+	Data         sql.NullString
+}
+
+// DBTask is a special type for selecting from the DB
 type DBTask struct {
 	ID        string
 	Type      string
