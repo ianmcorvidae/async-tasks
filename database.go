@@ -6,6 +6,8 @@ import (
 	"database/sql"
 	"github.com/cyverse-de/dbutil"
 
+	"time"
+
 	"encoding/json"
 
 	_ "github.com/lib/pq"
@@ -57,7 +59,10 @@ func (d *DBConnection) BeginTx(ctx context.Context, opts *sql.TxOptions) (*DBTx,
 
 // GetBaseTask fetches a task from the database by ID (sans behaviors/statuses)
 func (t *DBTx) GetBaseTask(id string) (*AsyncTask, error) {
-	query := `SELECT id, type, username, data, start_date, end_date FROM async_tasks WHERE id::text = $1`
+	query := `SELECT id, type, username, data,
+	                 start_date at time zone (select current_setting('TIMEZONE')) AS start_date,
+			 end_date at time zone (select current_setting('TIMEZONE')) AS end_date
+	            FROM async_tasks WHERE id::text = $1`
 
 	rows, err := t.tx.Query(query, id)
 	if err != nil {
@@ -165,7 +170,8 @@ func (t *DBTx) GetTaskBehavior(id string) ([]AsyncTaskBehavior, error) {
 
 // GetTaskStatus fetches a tasks's list of statuses from the DB by ID, ordered by creation date
 func (t *DBTx) GetTaskStatus(id string) ([]AsyncTaskStatus, error) {
-	query := `SELECT status, created_date FROM async_task_status WHERE async_task_id::text = $1 ORDER BY created_date ASC`
+	query := `SELECT status, created_date at time zone (select current_setting('TIMEZONE')) AS created_date
+	            FROM async_task_status WHERE async_task_id::text = $1 ORDER BY created_date ASC`
 
 	rows, err := t.tx.Query(query, id)
 	if err != nil {
@@ -184,4 +190,20 @@ func (t *DBTx) GetTaskStatus(id string) ([]AsyncTaskStatus, error) {
 	}
 
 	return statuses, nil
+}
+
+type TaskFilter struct {
+	types             []string
+	statuses          []string
+	usernames         []string
+	start_date_since  []time.Time
+	start_date_before []time.Time
+	end_date_since    []time.Time
+	end_date_before   []time.Time
+}
+
+// GetTasksByFilter fetches a set of tasks by a set of provided filters
+func (t *DBTx) GetTasksByFilter(filters TaskFilter) ([]AsyncTask, error) {
+	var tasks []AsyncTask
+	return tasks, nil
 }

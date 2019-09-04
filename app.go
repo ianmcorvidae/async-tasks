@@ -2,9 +2,9 @@ package main
 
 import (
 	"context"
-	"net/http"
 	"encoding/json"
 	"github.com/gorilla/mux"
+	"net/http"
 )
 
 type AsyncTasksApp struct {
@@ -25,7 +25,7 @@ func NewAsyncTasksApp(db *DBConnection, router *mux.Router) *AsyncTasksApp {
 
 func (a *AsyncTasksApp) InitRoutes() {
 	a.router.HandleFunc("/{id:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}}", a.GetByIdRequest).Methods("GET").Name("getById")
-	// a.router.HandleFunc("/", a.GetByFilterRequest).Methods("GET").Name("getByFilter")
+	a.router.HandleFunc("/", a.GetByFilterRequest).Methods("GET").Name("getByFilter")
 	// list multiple tasks by filter
 	// post new task
 	// delete by ID
@@ -34,9 +34,9 @@ func (a *AsyncTasksApp) InitRoutes() {
 
 func (a *AsyncTasksApp) GetByIdRequest(writer http.ResponseWriter, r *http.Request) {
 	var (
-		id  string
-		ok  bool
-		v   = mux.Vars(r)
+		id string
+		ok bool
+		v  = mux.Vars(r)
 	)
 
 	if id, ok = v["id"]; !ok {
@@ -77,30 +77,40 @@ func (a *AsyncTasksApp) GetByIdRequest(writer http.ResponseWriter, r *http.Reque
 	return
 }
 
-//func (a *AsyncTasksApp) GetByFilterRequest(writer http.ResponseWriter, r *http.Request) {
-//	var (
-//		v = r.URL.Query()
-//
-//		types       string
-//		statuses    string
-//		usernames   string
-//		start_dates string
-//		end_dates   string
-//	)
-//
-//}
+func (a *AsyncTasksApp) GetByFilterRequest(writer http.ResponseWriter, r *http.Request) {
+	//var (
+	//	v = r.URL.Query()
+
+	//	types             = v["type"]
+	//	statuses          = v["status"]
+	//	usernames         = v["username"]
+	//	start_date_since  = v["start_date_since"]
+	//	start_date_before = v["start_date_before"]
+	//	end_date_since    = v["end_date_since"]
+	//	end_date_before   = v["end_date_before"]
+	//)
+
+	//tx, err := a.db.BeginTx(context.TODO(), nil)
+	//if err != nil {
+	//	errored(writer, err.Error())
+	//	return
+	//}
+	//defer tx.tx.Rollback()
+
+	//tasks, err := tx.GetTasksByFilter()
+}
 
 func badRequest(writer http.ResponseWriter, msg string) {
-        http.Error(writer, msg, http.StatusBadRequest)
-        log.Error(msg)
+	http.Error(writer, msg, http.StatusBadRequest)
+	log.Error(msg)
 }
 
 func errored(writer http.ResponseWriter, msg string) {
-        http.Error(writer, msg, http.StatusInternalServerError)
-        log.Error(msg)
+	http.Error(writer, msg, http.StatusInternalServerError)
+	log.Error(msg)
 }
 
 func notFound(writer http.ResponseWriter, msg string) {
-        http.Error(writer, msg, http.StatusNotFound)
-        log.Error(msg)
+	http.Error(writer, msg, http.StatusNotFound)
+	log.Error(msg)
 }
