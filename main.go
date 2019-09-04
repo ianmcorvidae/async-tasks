@@ -27,7 +27,7 @@ func init() {
 func makeRouter() *mux.Router {
 	router := mux.NewRouter()
 	router.Handle("/debug/vars", http.DefaultServeMux)
-	router.HandleFunc("/", func(writer http.ResponseWriter, r *http.Request) {
+	router.HandleFunc("/hello", func(writer http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(writer, "Hello from async-tasks.\n")
 	}).Methods("GET")
 

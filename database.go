@@ -5,12 +5,13 @@ import (
 
 	"database/sql"
 	"github.com/cyverse-de/dbutil"
+	"github.com/lib/pq"
 
 	"time"
+	"fmt"
+	"strings"
 
 	"encoding/json"
-
-	_ "github.com/lib/pq"
 )
 
 // DBConnection wraps a sql.DB
@@ -81,32 +82,35 @@ func (t *DBTx) GetBaseTask(id string) (*AsyncTask, error) {
 		return nil, err
 	}
 
-	log.Info(dbtask)
+	return makeTask(dbtask)
+}
 
-	task := &AsyncTask{ID: dbtask.ID, Type: dbtask.Type}
+func makeTask(dbtask DBTask) (*AsyncTask, error) {
+	var err error
+        task := &AsyncTask{ID: dbtask.ID, Type: dbtask.Type}
 
-	if dbtask.Username.Valid {
-		task.Username = dbtask.Username.String
-	}
+        if dbtask.Username.Valid {
+                task.Username = dbtask.Username.String
+        }
 
-	if dbtask.Data.Valid {
-		jsonData := make(map[string]interface{})
+        if dbtask.Data.Valid {
+                jsonData := make(map[string]interface{})
 
-		err = json.Unmarshal([]byte(dbtask.Data.String), &jsonData)
-		if err != nil {
-			return task, err
-		}
+                err = json.Unmarshal([]byte(dbtask.Data.String), &jsonData)
+                if err != nil {
+                        return task, err
+                }
 
-		task.Data = jsonData
-	}
+                task.Data = jsonData
+        }
 
-	if dbtask.StartDate.Valid {
-		task.StartDate = &dbtask.StartDate.Time
-	}
+        if dbtask.StartDate.Valid {
+                task.StartDate = &dbtask.StartDate.Time
+        }
 
-	if dbtask.EndDate.Valid {
-		task.EndDate = &dbtask.EndDate.Time
-	}
+        if dbtask.EndDate.Valid {
+                task.EndDate = &dbtask.EndDate.Time
+        }
 
 	return task, nil
 }
@@ -193,17 +197,76 @@ func (t *DBTx) GetTaskStatus(id string) ([]AsyncTaskStatus, error) {
 }
 
 type TaskFilter struct {
-	types             []string
-	statuses          []string
-	usernames         []string
-	start_date_since  []time.Time
-	start_date_before []time.Time
-	end_date_since    []time.Time
-	end_date_before   []time.Time
+	IDs             []string
+	Types           []string
+	Statuses        []string
+	Usernames       []string
+	StartDateSince  []time.Time
+	StartDateBefore []time.Time
+	EndDateSince    []time.Time
+	EndDateBefore   []time.Time
 }
 
 // GetTasksByFilter fetches a set of tasks by a set of provided filters
 func (t *DBTx) GetTasksByFilter(filters TaskFilter) ([]AsyncTask, error) {
+	log.Info(filters)
+
 	var tasks []AsyncTask
+	var args []interface{}
+        var wheres []string
+
+	query := `SELECT id, type, username, data,
+	                 start_date at time zone (select current_setting('TIMEZONE')) AS start_date,
+			 end_date at time zone (select current_setting('TIMEZONE')) AS end_date
+	            FROM async_tasks`
+
+	currentIndex := 1
+
+	if len(filters.IDs) > 0 {
+		wheres = append(wheres, fmt.Sprintf(" id::text = ANY($%d)", currentIndex))
+		args = append(args, pq.Array(filters.IDs))
+		currentIndex = currentIndex + 1
+	}
+
+	if len(filters.Types) > 0 {
+		wheres = append(wheres, fmt.Sprintf(" type = ANY($%d)", currentIndex))
+		args = append(args, pq.Array(filters.Types))
+		currentIndex = currentIndex + 1
+	}
+
+	if len(filters.Usernames) > 0 {
+		wheres = append(wheres, fmt.Sprintf(" username = ANY($%d)", currentIndex))
+		args = append(args, pq.Array(filters.Usernames))
+		currentIndex = currentIndex + 1
+	}
+
+	if len(wheres) > 0 {
+		query = query + " WHERE " + strings.Join(wheres, " AND ")
+	}
+
+	rows, err := t.tx.Query(query, args...)
+        if err != nil {
+                return nil, err
+        }
+        defer rows.Close()
+
+        for rows.Next() {
+		var dbtask DBTask
+                if err := rows.Scan(&dbtask.ID, &dbtask.Type, &dbtask.Username, &dbtask.Data, &dbtask.StartDate, &dbtask.EndDate); err != nil {
+                        return nil, err
+                }
+
+		task, err := makeTask(dbtask)
+		if err != nil {
+			return nil, err
+		}
+
+		tasks = append(tasks, *task)
+        }
+
+        if err = rows.Err(); err != nil {
+                return nil, err
+        }
+
 	return tasks, nil
 }

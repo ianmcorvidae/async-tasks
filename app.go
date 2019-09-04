@@ -78,26 +78,41 @@ func (a *AsyncTasksApp) GetByIdRequest(writer http.ResponseWriter, r *http.Reque
 }
 
 func (a *AsyncTasksApp) GetByFilterRequest(writer http.ResponseWriter, r *http.Request) {
-	//var (
-	//	v = r.URL.Query()
+	var (
+		v = r.URL.Query()
 
-	//	types             = v["type"]
-	//	statuses          = v["status"]
-	//	usernames         = v["username"]
-	//	start_date_since  = v["start_date_since"]
-	//	start_date_before = v["start_date_before"]
-	//	end_date_since    = v["end_date_since"]
-	//	end_date_before   = v["end_date_before"]
-	//)
+		filters = TaskFilter{
+			IDs: v["id"],
+			Types: v["type"],
+			Statuses: v["status"],
+			Usernames: v["username"],
+		}
+		//start_date_since  = v["start_date_since"]
+		//start_date_before = v["start_date_before"]
+		//end_date_since    = v["end_date_since"]
+		//end_date_before   = v["end_date_before"]
+	)
 
-	//tx, err := a.db.BeginTx(context.TODO(), nil)
-	//if err != nil {
-	//	errored(writer, err.Error())
-	//	return
-	//}
-	//defer tx.tx.Rollback()
+	tx, err := a.db.BeginTx(context.TODO(), nil)
+	if err != nil {
+		errored(writer, err.Error())
+		return
+	}
+	defer tx.tx.Rollback()
 
-	//tasks, err := tx.GetTasksByFilter()
+	tasks, err := tx.GetTasksByFilter(filters)
+
+	log.Info(tasks)
+
+	jsoned, err := json.Marshal(tasks)
+	if err != nil {
+		errored(writer, err.Error())
+		return
+	}
+
+	writer.Write(jsoned)
+
+	return
 }
 
 func badRequest(writer http.ResponseWriter, msg string) {
