@@ -199,12 +199,12 @@ func (t *DBTx) GetTaskStatus(id string) ([]AsyncTaskStatus, error) {
 type TaskFilter struct {
 	IDs             []string
 	Types           []string
-	Statuses        []string
 	Usernames       []string
 	StartDateSince  []time.Time
 	StartDateBefore []time.Time
 	EndDateSince    []time.Time
 	EndDateBefore   []time.Time
+	Statuses        []string
 }
 
 // GetTasksByFilter fetches a set of tasks by a set of provided filters
@@ -237,6 +237,16 @@ func (t *DBTx) GetTasksByFilter(filters TaskFilter) ([]AsyncTask, error) {
 	if len(filters.Usernames) > 0 {
 		wheres = append(wheres, fmt.Sprintf(" username = ANY($%d)", currentIndex))
 		args = append(args, pq.Array(filters.Usernames))
+		currentIndex = currentIndex + 1
+	}
+
+	// dates
+
+	// status
+	if len(filters.Statuses) > 0 {
+		query = query + " JOIN async_task_status ON (async_task_status.async_task_id = async_tasks.id AND async_task_status.created_date = (select max(created_date) FROM async_task_status WHERE async_task_id = async_tasks.id))"
+		wheres = append(wheres, fmt.Sprintf(" status = ANY($%d)", currentIndex))
+		args = append(args, pq.Array(filters.Statuses))
 		currentIndex = currentIndex + 1
 	}
 
