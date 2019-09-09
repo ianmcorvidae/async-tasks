@@ -25,11 +25,16 @@ func NewAsyncTasksApp(db *DBConnection, router *mux.Router) *AsyncTasksApp {
 }
 
 func (a *AsyncTasksApp) InitRoutes() {
+	a.router.NotFoundHandler = http.HandlerFunc(a.NotFound)
 	a.router.HandleFunc("/tasks/{id:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}}", a.GetByIdRequest).Methods("GET").Name("getById")
 	a.router.HandleFunc("/tasks", a.GetByFilterRequest).Methods("GET").Name("getByFilter")
 	// post new task
 	// delete by ID
 	// put/patch (?) status, behavior, etc.
+}
+
+func (a *AsyncTasksApp) NotFound(writer http.ResponseWriter, r *http.Request) {
+	notFound(writer, "no endpoint found at this route")
 }
 
 func (a *AsyncTasksApp) GetByIdRequest(writer http.ResponseWriter, r *http.Request) {
@@ -156,17 +161,27 @@ func (a *AsyncTasksApp) GetByFilterRequest(writer http.ResponseWriter, r *http.R
 	return
 }
 
+type ErrorResp struct {
+	Msg string `json:"msg"`
+}
+
+func makeErrorJson(msg string) string {
+	err := ErrorResp{Msg: msg}
+	jsoned, _ := json.Marshal(err)
+	return string(jsoned)
+}
+
 func badRequest(writer http.ResponseWriter, msg string) {
-	http.Error(writer, msg, http.StatusBadRequest)
+	http.Error(writer, makeErrorJson(msg), http.StatusBadRequest)
 	log.Error(msg)
 }
 
 func errored(writer http.ResponseWriter, msg string) {
-	http.Error(writer, msg, http.StatusInternalServerError)
+	http.Error(writer, makeErrorJson(msg), http.StatusInternalServerError)
 	log.Error(msg)
 }
 
 func notFound(writer http.ResponseWriter, msg string) {
-	http.Error(writer, msg, http.StatusNotFound)
+	http.Error(writer, makeErrorJson(msg), http.StatusNotFound)
 	log.Error(msg)
 }
