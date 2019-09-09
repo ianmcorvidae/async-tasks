@@ -27,7 +27,6 @@ func NewAsyncTasksApp(db *DBConnection, router *mux.Router) *AsyncTasksApp {
 func (a *AsyncTasksApp) InitRoutes() {
 	a.router.HandleFunc("/{id:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}}", a.GetByIdRequest).Methods("GET").Name("getById")
 	a.router.HandleFunc("/", a.GetByFilterRequest).Methods("GET").Name("getByFilter")
-	// list multiple tasks by filter
 	// post new task
 	// delete by ID
 	// put/patch (?) status, behavior, etc.
