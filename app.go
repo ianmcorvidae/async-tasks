@@ -6,6 +6,7 @@ import (
 	"github.com/gorilla/mux"
 	"net/http"
 	"time"
+	"fmt"
 )
 
 type AsyncTasksApp struct {
@@ -34,7 +35,7 @@ func (a *AsyncTasksApp) InitRoutes() {
 }
 
 func (a *AsyncTasksApp) NotFound(writer http.ResponseWriter, r *http.Request) {
-	notFound(writer, "no endpoint found at this route")
+	notFound(writer, fmt.Sprintf("no endpoint found at %s %s", r.Method, r.URL.Path))
 }
 
 func (a *AsyncTasksApp) GetByIdRequest(writer http.ResponseWriter, r *http.Request) {
