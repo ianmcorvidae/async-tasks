@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"github.com/gorilla/mux"
 	"net/http"
+	"time"
 )
 
 type AsyncTasksApp struct {
@@ -82,16 +83,57 @@ func (a *AsyncTasksApp) GetByFilterRequest(writer http.ResponseWriter, r *http.R
 		v = r.URL.Query()
 
 		filters = TaskFilter{
-			IDs: v["id"],
-			Types: v["type"],
-			Statuses: v["status"],
+			IDs:       v["id"],
+			Types:     v["type"],
+			Statuses:  v["status"],
 			Usernames: v["username"],
 		}
-		//start_date_since  = v["start_date_since"]
-		//start_date_before = v["start_date_before"]
-		//end_date_since    = v["end_date_since"]
-		//end_date_before   = v["end_date_before"]
+		start_date_since  = v["start_date_since"]
+		start_date_before = v["start_date_before"]
+		end_date_since    = v["end_date_since"]
+		end_date_before   = v["end_date_before"]
+		null_end          = v["include_null_end"]
 	)
+
+	if len(null_end) > 0 {
+		filters.IncludeNullEnd = true
+	}
+
+	for _, startdate := range start_date_since {
+		parsed, err := time.Parse(time.RFC3339Nano, startdate)
+		if err != nil {
+			errored(writer, err.Error())
+			return
+		}
+		filters.StartDateSince = append(filters.StartDateSince, parsed)
+	}
+
+	for _, startdate := range start_date_before {
+		parsed, err := time.Parse(time.RFC3339Nano, startdate)
+		if err != nil {
+			errored(writer, err.Error())
+			return
+		}
+		filters.StartDateBefore = append(filters.StartDateBefore, parsed)
+	}
+
+	for _, enddate := range end_date_since {
+		parsed, err := time.Parse(time.RFC3339Nano, enddate)
+		if err != nil {
+			errored(writer, err.Error())
+			return
+		}
+		filters.EndDateSince = append(filters.EndDateSince, parsed)
+	}
+
+	for _, enddate := range end_date_before {
+		parsed, err := time.Parse(time.RFC3339Nano, enddate)
+		if err != nil {
+			errored(writer, err.Error())
+			return
+		}
+		filters.EndDateBefore = append(filters.EndDateBefore, parsed)
+	}
 
 	tx, err := a.db.BeginTx(context.TODO(), nil)
 	if err != nil {

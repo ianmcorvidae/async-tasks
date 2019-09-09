@@ -7,9 +7,9 @@ import (
 	"github.com/cyverse-de/dbutil"
 	"github.com/lib/pq"
 
-	"time"
 	"fmt"
 	"strings"
+	"time"
 
 	"encoding/json"
 )
@@ -87,30 +87,30 @@ func (t *DBTx) GetBaseTask(id string) (*AsyncTask, error) {
 
 func makeTask(dbtask DBTask) (*AsyncTask, error) {
 	var err error
-        task := &AsyncTask{ID: dbtask.ID, Type: dbtask.Type}
+	task := &AsyncTask{ID: dbtask.ID, Type: dbtask.Type}
 
-        if dbtask.Username.Valid {
-                task.Username = dbtask.Username.String
-        }
+	if dbtask.Username.Valid {
+		task.Username = dbtask.Username.String
+	}
 
-        if dbtask.Data.Valid {
-                jsonData := make(map[string]interface{})
+	if dbtask.Data.Valid {
+		jsonData := make(map[string]interface{})
 
-                err = json.Unmarshal([]byte(dbtask.Data.String), &jsonData)
-                if err != nil {
-                        return task, err
-                }
+		err = json.Unmarshal([]byte(dbtask.Data.String), &jsonData)
+		if err != nil {
+			return task, err
+		}
 
-                task.Data = jsonData
-        }
+		task.Data = jsonData
+	}
 
-        if dbtask.StartDate.Valid {
-                task.StartDate = &dbtask.StartDate.Time
-        }
+	if dbtask.StartDate.Valid {
+		task.StartDate = &dbtask.StartDate.Time
+	}
 
-        if dbtask.EndDate.Valid {
-                task.EndDate = &dbtask.EndDate.Time
-        }
+	if dbtask.EndDate.Valid {
+		task.EndDate = &dbtask.EndDate.Time
+	}
 
 	return task, nil
 }
@@ -204,6 +204,7 @@ type TaskFilter struct {
 	StartDateBefore []time.Time
 	EndDateSince    []time.Time
 	EndDateBefore   []time.Time
+	IncludeNullEnd  bool
 	Statuses        []string
 }
 
@@ -213,7 +214,7 @@ func (t *DBTx) GetTasksByFilter(filters TaskFilter) ([]AsyncTask, error) {
 
 	var tasks []AsyncTask
 	var args []interface{}
-        var wheres []string
+	var wheres []string
 
 	query := `SELECT id, type, username, data,
 	                 start_date at time zone (select current_setting('TIMEZONE')) AS start_date,
@@ -240,9 +241,46 @@ func (t *DBTx) GetTasksByFilter(filters TaskFilter) ([]AsyncTask, error) {
 		currentIndex = currentIndex + 1
 	}
 
-	// dates
+	if len(filters.StartDateSince) > 0 {
+		if len(filters.StartDateSince) > 1 {
+			log.Warn("More than one start_date_since filter is unsupported. Only the oldest date will be considered.")
+		}
+		wheres = append(wheres, fmt.Sprintf(" start_date > ANY($%d)", currentIndex))
+		args = append(args, pq.Array(filters.StartDateSince))
+		currentIndex = currentIndex + 1
+	}
 
-	// status
+	if len(filters.StartDateBefore) > 0 {
+		if len(filters.StartDateBefore) > 1 {
+			log.Warn("More than one start_date_before filter is unsupported. Only the newest date will be considered.")
+		}
+		wheres = append(wheres, fmt.Sprintf(" start_date < ANY($%d)", currentIndex))
+		args = append(args, pq.Array(filters.StartDateBefore))
+		currentIndex = currentIndex + 1
+	}
+
+	if len(filters.EndDateSince) > 0 {
+		if len(filters.EndDateSince) > 1 {
+			log.Warn("More than one end_date_since filter is unsupported. Only the oldest date will be considered.")
+		}
+		if filters.IncludeNullEnd {
+			wheres = append(wheres, fmt.Sprintf(" (end_date > ANY($%d) OR end_date IS NULL)", currentIndex))
+		} else {
+			wheres = append(wheres, fmt.Sprintf(" end_date > ANY($%d)", currentIndex))
+		}
+		args = append(args, pq.Array(filters.EndDateSince))
+		currentIndex = currentIndex + 1
+	}
+
+	if len(filters.EndDateBefore) > 0 {
+		if len(filters.EndDateBefore) > 1 {
+			log.Warn("More than one end_date_before filter is unsupported. Only the newest date will be considered.")
+		}
+		wheres = append(wheres, fmt.Sprintf(" end_date < ANY($%d)", currentIndex))
+		args = append(args, pq.Array(filters.EndDateBefore))
+		currentIndex = currentIndex + 1
+	}
+
 	if len(filters.Statuses) > 0 {
 		query = query + " JOIN async_task_status ON (async_task_status.async_task_id = async_tasks.id AND async_task_status.created_date = (select max(created_date) FROM async_task_status WHERE async_task_id = async_tasks.id))"
 		wheres = append(wheres, fmt.Sprintf(" status = ANY($%d)", currentIndex))
@@ -255,16 +293,16 @@ func (t *DBTx) GetTasksByFilter(filters TaskFilter) ([]AsyncTask, error) {
 	}
 
 	rows, err := t.tx.Query(query, args...)
-        if err != nil {
-                return nil, err
-        }
-        defer rows.Close()
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
 
-        for rows.Next() {
+	for rows.Next() {
 		var dbtask DBTask
-                if err := rows.Scan(&dbtask.ID, &dbtask.Type, &dbtask.Username, &dbtask.Data, &dbtask.StartDate, &dbtask.EndDate); err != nil {
-                        return nil, err
-                }
+		if err := rows.Scan(&dbtask.ID, &dbtask.Type, &dbtask.Username, &dbtask.Data, &dbtask.StartDate, &dbtask.EndDate); err != nil {
+			return nil, err
+		}
 
 		task, err := makeTask(dbtask)
 		if err != nil {
@@ -272,11 +310,11 @@ func (t *DBTx) GetTasksByFilter(filters TaskFilter) ([]AsyncTask, error) {
 		}
 
 		tasks = append(tasks, *task)
-        }
+	}
 
-        if err = rows.Err(); err != nil {
-                return nil, err
-        }
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
 
 	return tasks, nil
 }
