@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"time"
 	"fmt"
+	"io"
+	"io/ioutil"
 )
 
 type AsyncTasksApp struct {
@@ -29,7 +31,7 @@ func (a *AsyncTasksApp) InitRoutes() {
 	a.router.NotFoundHandler = http.HandlerFunc(a.NotFound)
 	a.router.HandleFunc("/tasks/{id:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}}", a.GetByIdRequest).Methods("GET").Name("getById")
 	a.router.HandleFunc("/tasks", a.GetByFilterRequest).Methods("GET").Name("getByFilter")
-	// post new task
+	a.router.HandleFunc("/tasks", a.CreateTaskRequest).Methods("POST").Name("createTask")
 	// delete by ID
 	// put/patch (?) status, behavior, etc.
 }
@@ -160,6 +162,48 @@ func (a *AsyncTasksApp) GetByFilterRequest(writer http.ResponseWriter, r *http.R
 	writer.Write(jsoned)
 
 	return
+}
+
+func (a *AsyncTasksApp) CreateTaskRequest(writer http.ResponseWriter, r *http.Request) {
+	var rawtask AsyncTask
+
+	body, err := ioutil.ReadAll(io.LimitReader(r.Body, 104857600))
+	if err != nil {
+		errored(writer, err.Error())
+		return
+	}
+	if err := r.Body.Close(); err != nil {
+		errored(writer, err.Error())
+		return
+	}
+	if err := json.Unmarshal(body, &rawtask); err != nil {
+		errored(writer, err.Error())
+		return
+	}
+
+	if rawtask.Type == "" {
+		errored(writer, "Task type must be provided")
+		return
+	}
+
+	for _, behavior := range rawtask.Behaviors {
+		if behavior.BehaviorType == "" {
+			errored(writer, "All behaviors must have a type")
+			return
+		}
+	}
+
+	if len(rawtask.Status) > 1 {
+		errored(writer, "A new task may only include one initial status")
+		return
+	}
+
+	if len(rawtask.Status) > 0 && rawtask.Status[0].Status == "" {
+		errored(writer, "A blank status is not allowed")
+		return
+	}
+
+	log.Info(rawtask)
 }
 
 type ErrorResp struct {
