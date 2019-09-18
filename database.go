@@ -8,6 +8,7 @@ import (
 	"github.com/lib/pq"
 
 	"fmt"
+	"errors"
 	"strings"
 	"time"
 
@@ -317,4 +318,61 @@ func (t *DBTx) GetTasksByFilter(filters TaskFilter) ([]AsyncTask, error) {
 	}
 
 	return tasks, nil
+}
+
+// InsertTask inserts a provided AsyncTask into the DB and returns the task's generated ID as a string
+func (t *DBTx) InsertTask(task AsyncTask) (string, error) {
+	var columns []string
+	var placeholders []string
+	var args []interface{}
+
+	currentIndex := 1
+
+	if task.Type == "" {
+		return "", errors.New("Task type must be provided")
+	}
+	columns = append(columns, "type")
+	placeholders = append(placeholders, fmt.Sprintf("$%d", currentIndex))
+	args = append(args, task.Type)
+	currentIndex = currentIndex + 1
+
+	if task.Username != "" {
+		columns = append(columns, "username")
+		placeholders = append(placeholders, fmt.Sprintf("$%d", currentIndex))
+		args = append(args, task.Username)
+		currentIndex = currentIndex + 1
+	}
+
+	if len(task.Data) > 0 {
+		jsoned, err := json.Marshal(task.Data)
+		if err != nil {
+			return "", err
+		}
+
+		columns = append(columns, "data")
+		placeholders = append(placeholders, fmt.Sprintf("$%d", currentIndex))
+		args = append(args, jsoned)
+		currentIndex = currentIndex + 1
+	}
+
+	query := fmt.Sprintf(`INSERT INTO async_tasks (%s) VALUES (%s) RETURNING id::text`, strings.Join(columns, ", "), strings.Join(placeholders, ", "))
+
+	rows, err := t.tx.Query(query, args...)
+	if err != nil {
+		return "", err
+	}
+	defer rows.Close()
+
+	var id string
+	for rows.Next() {
+		if err := rows.Scan(&id); err != nil {
+			return "", err
+		}
+	}
+
+	if err = rows.Err(); err != nil {
+		return "", err
+	}
+
+	return id, nil
 }

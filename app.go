@@ -33,7 +33,8 @@ func (a *AsyncTasksApp) InitRoutes() {
 	a.router.HandleFunc("/tasks", a.GetByFilterRequest).Methods("GET").Name("getByFilter")
 	a.router.HandleFunc("/tasks", a.CreateTaskRequest).Methods("POST").Name("createTask")
 	// delete by ID
-	// put/patch (?) status, behavior, etc.
+	// POST /task/:id/status (add new status)
+	// POST /task/:id/behavior (add new behavior) (?)
 }
 
 func (a *AsyncTasksApp) NotFound(writer http.ResponseWriter, r *http.Request) {
@@ -203,7 +204,22 @@ func (a *AsyncTasksApp) CreateTaskRequest(writer http.ResponseWriter, r *http.Re
 		return
 	}
 
-	log.Info(rawtask)
+	tx, err := a.db.BeginTx(context.TODO(), nil)
+	if err != nil {
+		errored(writer, err.Error())
+		return
+	}
+	defer tx.tx.Rollback()
+
+	id, err := tx.InsertTask(rawtask)
+	if err != nil {
+		errored(writer, err.Error())
+		return
+	}
+
+	log.Info(id)
+
+	tx.tx.Commit()
 }
 
 type ErrorResp struct {
