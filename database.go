@@ -391,6 +391,7 @@ func (t *DBTx) InsertTask(task AsyncTask) (string, error) {
 		return "", err
 	}
 
+	// This will only insert one status, we're assuming only one gets to this point (enforced in the route, not here)
 	if len(task.Status) > 0 {
 		err = t.InsertTaskStatus(task.Status[0], id)
 	}
