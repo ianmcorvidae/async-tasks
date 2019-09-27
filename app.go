@@ -220,6 +220,12 @@ func (a *AsyncTasksApp) CreateTaskRequest(writer http.ResponseWriter, r *http.Re
 	log.Info(id)
 
 	tx.tx.Commit()
+
+	url, _ := a.router.Get("getById").URL("id", id)
+	log.Info(url)
+
+	writer.Header().Set("Location", url.EscapedPath())
+	writer.WriteHeader(http.StatusCreated)
 }
 
 type ErrorResp struct {
