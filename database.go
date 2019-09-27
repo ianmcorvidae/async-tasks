@@ -391,5 +391,38 @@ func (t *DBTx) InsertTask(task AsyncTask) (string, error) {
 		return "", err
 	}
 
+	if len(task.Status) > 0 {
+		err = t.InsertTaskStatus(task.Status[0], id)
+	}
+
 	return id, nil
+}
+
+// InsertTaskStatus inserts a provided AsyncTaskStatus into the DB for the provided async task ID
+func (t *DBTx) InsertTaskStatus(status AsyncTaskStatus, taskID string) error {
+	var query string
+	var args []interface{}
+
+	if status.Status == "" {
+		return errors.New("Status type must be provided")
+	}
+
+	args = append(args, taskID)
+	args = append(args, status.Status)
+	if status.CreatedDate.IsZero() {
+		query = `INSERT INTO async_task_status (async_task_id, status, created_date) VALUES ($1, $2, now())`
+	} else {
+		query = `INSERT INTO async_task_status (async_task_id, status, created_date) VALUES ($1, $2, $3 AT TIME ZONE (select current_setting('TIMEZONE')))`
+		args = append(args, status.CreatedDate)
+	}
+
+	rows, err := t.tx.Query(query, args...)
+	if err != nil {
+		return err
+	}
+	if err = rows.Err(); err != nil {
+		return err
+	}
+
+	return nil
 }
