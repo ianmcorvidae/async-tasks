@@ -355,6 +355,23 @@ func (t *DBTx) InsertTask(task AsyncTask) (string, error) {
 		currentIndex = currentIndex + 1
 	}
 
+	if task.StartDate == nil || task.StartDate.IsZero() {
+		columns = append(columns, "start_date")
+		placeholders = append(placeholders, "now()")
+	} else {
+		columns = append(columns, "start_date")
+		placeholders = append(placeholders, fmt.Sprintf("$%d AT TIME ZONE (select current_setting('TIMEZONE'))", currentIndex))
+		args = append(args, task.StartDate)
+		currentIndex = currentIndex + 1
+	}
+
+	if task.EndDate != nil && !task.EndDate.IsZero() {
+		columns = append(columns, "end_date")
+		placeholders = append(placeholders, fmt.Sprintf("$%d AT TIME ZONE (select current_setting('TIMEZONE'))", currentIndex))
+		args = append(args, task.EndDate)
+		currentIndex = currentIndex + 1
+	}
+
 	query := fmt.Sprintf(`INSERT INTO async_tasks (%s) VALUES (%s) RETURNING id::text`, strings.Join(columns, ", "), strings.Join(placeholders, ", "))
 
 	rows, err := t.tx.Query(query, args...)
