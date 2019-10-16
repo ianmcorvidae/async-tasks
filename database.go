@@ -399,6 +399,14 @@ func (t *DBTx) InsertTask(task AsyncTask) (string, error) {
 		}
 	}
 
+	// this could end up poorly performant if we want to insert a bunch at once
+	for _, behavior := range task.Behaviors {
+		err = t.InsertTaskBehavior(behavior, id)
+		if err != nil {
+			return "", err
+		}
+	}
+
 	return id, nil
 }
 
@@ -425,6 +433,46 @@ func (t *DBTx) InsertTaskStatus(status AsyncTaskStatus, taskID string) error {
 		return err
 	}
 	if err = rows.Err(); err != nil {
+		return err
+	}
+	if err = rows.Close(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// InsertTaskBehavior inserts a provided AsyncTaskBehavior into the DB for the provided async task ID
+func (t *DBTx) InsertTaskBehavior(behavior AsyncTaskBehavior, taskID string) error {
+	var query string
+	var args []interface{}
+
+	if behavior.BehaviorType == "" {
+		return errors.New("Behavior type must be provided")
+	}
+
+	args = append(args, taskID)
+	args = append(args, behavior.BehaviorType)
+
+	if len(behavior.Data) > 0 {
+		query = `INSERT INTO async_task_behavior (async_task_id, behavior_type, data) VALUES ($1, $2, $3)`
+		jsoned, err := json.Marshal(behavior.Data)
+		if err != nil {
+			return err
+		}
+		args = append(args, jsoned)
+	} else {
+		query = `INSERT INTO async_task_behavior (async_task_id, behavior_type) VALUES ($1, $2)`
+	}
+
+	rows, err := t.tx.Query(query, args...)
+	if err != nil {
+		return err
+	}
+	if err = rows.Err(); err != nil {
+		return err
+	}
+	if err = rows.Close(); err != nil {
 		return err
 	}
 
