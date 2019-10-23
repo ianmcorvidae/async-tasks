@@ -116,6 +116,11 @@ func makeTask(dbtask DBTask) (*AsyncTask, error) {
 	return task, nil
 }
 
+// DeleteTask deletes a task from the database by ID
+func (t *DBTx) DeleteTask(id string) error {
+	return nil
+}
+
 // GetTask fetches a task from the database by ID, including behaviors and statuses
 func (t *DBTx) GetTask(id string) (*AsyncTask, error) {
 	task, err := t.GetBaseTask(id)

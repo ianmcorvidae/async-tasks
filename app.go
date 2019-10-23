@@ -30,6 +30,8 @@ func NewAsyncTasksApp(db *DBConnection, router *mux.Router) *AsyncTasksApp {
 func (a *AsyncTasksApp) InitRoutes() {
 	a.router.NotFoundHandler = http.HandlerFunc(a.NotFound)
 	a.router.HandleFunc("/tasks/{id:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}}", a.GetByIdRequest).Methods("GET").Name("getById")
+	a.router.HandleFunc("/tasks/{id:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}}", a.DeleteByIdRequest).Methods("DELETE").Name("deleteById")
+
 	a.router.HandleFunc("/tasks", a.GetByFilterRequest).Methods("GET").Name("getByFilter")
 	a.router.HandleFunc("/tasks", a.CreateTaskRequest).Methods("POST").Name("createTask")
 	// delete by ID
@@ -83,6 +85,48 @@ func (a *AsyncTasksApp) GetByIdRequest(writer http.ResponseWriter, r *http.Reque
 
 	writer.Write(jsoned)
 
+	return
+}
+
+func (a *AsyncTasksApp) DeleteByIdRequest(writer http.ResponseWriter, r *http.Request) {
+	var (
+		id string
+		ok bool
+		v  = mux.Vars(r)
+	)
+
+	if id, ok = v["id"]; !ok {
+		badRequest(writer, "No ID in URL")
+		return
+	}
+
+	log.Infof("Fetching async task %s", id)
+
+	tx, err := a.db.BeginTx(context.TODO(), nil)
+	if err != nil {
+		errored(writer, err.Error())
+		return
+	}
+	defer tx.tx.Rollback()
+
+	task, err := tx.GetTask(id)
+	if err != nil {
+		errored(writer, err.Error())
+		return
+	}
+
+	if task.ID == "" {
+		notFound(writer, "not found")
+		return
+	}
+
+	err = tx.DeleteTask(id)
+	if err != nil {
+		errored(writer, err.Error())
+		return
+	}
+
+	tx.tx.Commit()
 	return
 }
 
