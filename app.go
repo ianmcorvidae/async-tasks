@@ -32,6 +32,7 @@ func (a *AsyncTasksApp) InitRoutes() {
 	a.router.HandleFunc("/tasks/{id:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}}", a.GetByIdRequest).Methods("GET").Name("getById")
 	a.router.HandleFunc("/tasks/{id:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}}", a.DeleteByIdRequest).Methods("DELETE").Name("deleteById")
 	a.router.HandleFunc("/tasks/{id:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}}/status", a.AddStatusRequest).Methods("POST").Name("addStatus")
+	a.router.HandleFunc("/tasks/{id:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}}/behaviors", a.AddBehaviorRequest).Methods("POST").Name("addBehavior")
 
 	a.router.HandleFunc("/tasks", a.GetByFilterRequest).Methods("GET").Name("getByFilter")
 	a.router.HandleFunc("/tasks", a.CreateTaskRequest).Methods("POST").Name("createTask")
@@ -322,6 +323,69 @@ func (a *AsyncTasksApp) AddStatusRequest(writer http.ResponseWriter, r *http.Req
 	}
 
 	err = tx.InsertTaskStatus(rawstatus, id)
+	if err != nil {
+		errored(writer, err.Error())
+		return
+	}
+
+	tx.tx.Commit()
+
+	url, _ := a.router.Get("getById").URL("id", id)
+	log.Info(url)
+
+	writer.Header().Set("Location", url.EscapedPath())
+	writer.WriteHeader(http.StatusCreated)
+}
+
+func (a *AsyncTasksApp) AddBehaviorRequest(writer http.ResponseWriter, r *http.Request) {
+	var (
+		id string
+		ok bool
+	        rawbehavior AsyncTaskBehavior
+		v  = mux.Vars(r)
+	)
+
+	if id, ok = v["id"]; !ok {
+		badRequest(writer, "No ID in URL")
+		return
+	}
+
+	log.Infof("Fetching async task %s", id)
+
+	tx, err := a.db.BeginTx(context.TODO(), nil)
+	if err != nil {
+		errored(writer, err.Error())
+		return
+	}
+	defer tx.tx.Rollback()
+
+	task, err := tx.GetTask(id)
+	if err != nil {
+		errored(writer, err.Error())
+		return
+	}
+
+	if task.ID == "" {
+		notFound(writer, "not found")
+		return
+	}
+
+	body, err := ioutil.ReadAll(io.LimitReader(r.Body, 104857600))
+
+	if err != nil {
+		errored(writer, err.Error())
+		return
+	}
+	if err := r.Body.Close(); err != nil {
+		errored(writer, err.Error())
+		return
+	}
+	if err := json.Unmarshal(body, &rawbehavior); err != nil {
+		errored(writer, err.Error())
+		return
+	}
+
+	err = tx.InsertTaskBehavior(rawbehavior, id)
 	if err != nil {
 		errored(writer, err.Error())
 		return
