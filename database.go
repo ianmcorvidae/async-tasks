@@ -118,6 +118,13 @@ func makeTask(dbtask DBTask) (*AsyncTask, error) {
 
 // DeleteTask deletes a task from the database by ID
 func (t *DBTx) DeleteTask(id string) error {
+	query := `DELETE FROM async_tasks WHERE id::text = $1`
+
+	_, err := t.tx.Exec(query, id)
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 
