@@ -36,9 +36,6 @@ func (a *AsyncTasksApp) InitRoutes() {
 
 	a.router.HandleFunc("/tasks", a.GetByFilterRequest).Methods("GET").Name("getByFilter")
 	a.router.HandleFunc("/tasks", a.CreateTaskRequest).Methods("POST").Name("createTask")
-
-	// POST /task/:id/status (add new status)
-	// POST /task/:id/behavior (add new behavior) (?)
 }
 
 func (a *AsyncTasksApp) NotFound(writer http.ResponseWriter, r *http.Request) {
