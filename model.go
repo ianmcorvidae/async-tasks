@@ -27,7 +27,7 @@ type AsyncTask struct {
 	StartDate *time.Time             `json:"start_date"`
 	EndDate   *time.Time             `json:"end_date"`
 	Behaviors []AsyncTaskBehavior    `json:"behaviors,omitempty"`
-	Status    []AsyncTaskStatus      `json:"status,omitempty"`
+	Statuses  []AsyncTaskStatus      `json:"statuses,omitempty"`
 }
 
 // DBTaskBehavior is a special type for selecting from the DB

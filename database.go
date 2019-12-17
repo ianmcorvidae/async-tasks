@@ -135,23 +135,23 @@ func (t *DBTx) GetTask(id string) (*AsyncTask, error) {
 		return task, err
 	}
 
-	behaviors, err := t.GetTaskBehavior(id)
+	behaviors, err := t.GetTaskBehaviors(id)
 	if err != nil {
 		return task, err
 	}
 	task.Behaviors = behaviors
 
-	statuses, err := t.GetTaskStatus(id)
+	statuses, err := t.GetTaskStatuses(id)
 	if err != nil {
 		return task, err
 	}
-	task.Status = statuses
+	task.Statuses = statuses
 
 	return task, err
 }
 
-// GetTaskBehavior fetches a task's set of behaviors from the DB by ID
-func (t *DBTx) GetTaskBehavior(id string) ([]AsyncTaskBehavior, error) {
+// GetTaskBehaviors fetches a task's set of behaviors from the DB by ID
+func (t *DBTx) GetTaskBehaviors(id string) ([]AsyncTaskBehavior, error) {
 	query := `SELECT behavior_type, data FROM async_task_behavior WHERE async_task_id::text = $1`
 
 	rows, err := t.tx.Query(query, id)
@@ -185,8 +185,8 @@ func (t *DBTx) GetTaskBehavior(id string) ([]AsyncTaskBehavior, error) {
 	return behaviors, nil
 }
 
-// GetTaskStatus fetches a tasks's list of statuses from the DB by ID, ordered by creation date
-func (t *DBTx) GetTaskStatus(id string) ([]AsyncTaskStatus, error) {
+// GetTaskStatuses fetches a tasks's list of statuses from the DB by ID, ordered by creation date
+func (t *DBTx) GetTaskStatuses(id string) ([]AsyncTaskStatus, error) {
 	query := `SELECT status, created_date at time zone (select current_setting('TIMEZONE')) AS created_date
 	            FROM async_task_status WHERE async_task_id::text = $1 ORDER BY created_date ASC`
 
@@ -404,8 +404,8 @@ func (t *DBTx) InsertTask(task AsyncTask) (string, error) {
 	}
 
 	// This will only insert one status, we're assuming only one gets to this point (enforced in the route, not here)
-	if len(task.Status) > 0 {
-		err = t.InsertTaskStatus(task.Status[0], id)
+	if len(task.Statuses) > 0 {
+		err = t.InsertTaskStatus(task.Statuses[0], id)
 		if err != nil {
 			return "", err
 		}

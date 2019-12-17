@@ -237,12 +237,12 @@ func (a *AsyncTasksApp) CreateTaskRequest(writer http.ResponseWriter, r *http.Re
 		}
 	}
 
-	if len(rawtask.Status) > 1 {
+	if len(rawtask.Statuses) > 1 {
 		errored(writer, "A new task may only include one initial status")
 		return
 	}
 
-	if len(rawtask.Status) > 0 && rawtask.Status[0].Status == "" {
+	if len(rawtask.Statuses) > 0 && rawtask.Statuses[0].Status == "" {
 		errored(writer, "A blank status is not allowed")
 		return
 	}
