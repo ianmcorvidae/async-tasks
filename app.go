@@ -11,6 +11,8 @@ import (
 	"io/ioutil"
 )
 
+const hundredMiB = 104857600
+
 type AsyncTasksApp struct {
 	db     *DBConnection
 	router *mux.Router
@@ -211,7 +213,7 @@ func (a *AsyncTasksApp) GetByFilterRequest(writer http.ResponseWriter, r *http.R
 func (a *AsyncTasksApp) CreateTaskRequest(writer http.ResponseWriter, r *http.Request) {
 	var rawtask AsyncTask
 
-	body, err := ioutil.ReadAll(io.LimitReader(r.Body, 104857600))
+	body, err := ioutil.ReadAll(io.LimitReader(r.Body, hundredMiB))
 	if err != nil {
 		errored(writer, err.Error())
 		return
@@ -304,7 +306,7 @@ func (a *AsyncTasksApp) AddStatusRequest(writer http.ResponseWriter, r *http.Req
 		return
 	}
 
-	body, err := ioutil.ReadAll(io.LimitReader(r.Body, 104857600))
+	body, err := ioutil.ReadAll(io.LimitReader(r.Body, hundredMiB))
 
 	if err != nil {
 		errored(writer, err.Error())
@@ -367,7 +369,7 @@ func (a *AsyncTasksApp) AddBehaviorRequest(writer http.ResponseWriter, r *http.R
 		return
 	}
 
-	body, err := ioutil.ReadAll(io.LimitReader(r.Body, 104857600))
+	body, err := ioutil.ReadAll(io.LimitReader(r.Body, hundredMiB))
 
 	if err != nil {
 		errored(writer, err.Error())
