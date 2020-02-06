@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"strings"
+	"time"
 
 	"net/http"
 	"github.com/gorilla/mux"
@@ -72,6 +73,18 @@ func main() {
 	row.Scan(&res)
 	log.Infof("There are %d async tasks in the database", res.count)
 
+	// Make periodic updater
+	ticker := time.NewTicker(30 * time.Second) // twice a minute means minutely updates behave basically decently, if we need faster we can change this
+	defer ticker.Stop()
+
+	go func() {
+		for {
+			t := <-ticker.C
+			log.Infof("Got periodic timer tick: %s", t)
+		}
+	}()
+
+	// Make HTTP listeners
 	router := makeRouter()
 
 	app := NewAsyncTasksApp(db, router)
