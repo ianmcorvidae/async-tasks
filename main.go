@@ -74,6 +74,7 @@ func main() {
 	log.Infof("There are %d async tasks in the database", res.count)
 
 	// Make periodic updater
+	updater := NewAsyncTasksUpdater(db)
 	ticker := time.NewTicker(30 * time.Second) // twice a minute means minutely updates behave basically decently, if we need faster we can change this
 	defer ticker.Stop()
 
@@ -81,6 +82,10 @@ func main() {
 		for {
 			t := <-ticker.C
 			log.Infof("Got periodic timer tick: %s", t)
+			err := updater.Do(t)
+			if err != nil {
+				log.Error(err)
+			}
 		}
 	}()
 
