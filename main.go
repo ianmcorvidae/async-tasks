@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"context"
 
 	"net/http"
 	"github.com/gorilla/mux"
@@ -82,7 +83,9 @@ func main() {
 		for {
 			t := <-ticker.C
 			log.Infof("Got periodic timer tick: %s", t)
-			err := updater.Do(t)
+
+			ctx := context.TODO()
+			err := updater.Do(ctx, t)
 			if err != nil {
 				log.Error(err)
 			}
