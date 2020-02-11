@@ -24,7 +24,7 @@ func NewAsyncTasksUpdater(db *DBConnection) *AsyncTasksUpdater {
 	return updater
 }
 
-func (u *AsyncTasksUpdater) Do(ctx context.Context, tickerTime time.Time) error {
+func (u *AsyncTasksUpdater) DoPeriodicUpdate(ctx context.Context, tickerTime time.Time) error {
 	log.Infof("Running update with time %s", tickerTime)
 
 	var wg sync.WaitGroup
@@ -32,14 +32,14 @@ func (u *AsyncTasksUpdater) Do(ctx context.Context, tickerTime time.Time) error 
 	wg.Add(1)
 	for behaviorType, processor := range u.behaviorProcessors {
 		wg.Add(1)
-		go func(ctx context.Context, behaviorType string, tickerTime time.Time, wg *sync.WaitGroup) {
+		go func(ctx context.Context, behaviorType string, processor BehaviorProcessor, tickerTime time.Time, wg *sync.WaitGroup) {
 			defer wg.Done()
 			log.Infof("Processing behavior type %s for time %s", behaviorType, tickerTime)
 			err := processor(ctx, tickerTime)
 			if err != nil {
 				log.Error(err)
 			}
-		}(ctx, behaviorType, tickerTime, &wg)
+		}(ctx, behaviorType, processor, tickerTime, &wg)
 	}
 	wg.Done()
 	wg.Wait()

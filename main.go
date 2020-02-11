@@ -84,8 +84,10 @@ func main() {
 			t := <-ticker.C
 			log.Infof("Got periodic timer tick: %s", t)
 
-			ctx := context.TODO()
-			err := updater.Do(ctx, t)
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+
+			err := updater.DoPeriodicUpdate(ctx, t)
 			if err != nil {
 				log.Error(err)
 			}
