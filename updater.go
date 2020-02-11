@@ -2,14 +2,14 @@ package main
 
 import (
 	"context"
-	"time"
 	"sync"
+	"time"
 )
 
 type BehaviorProcessor func(ctx context.Context, tickerTime time.Time) error
 
 type AsyncTasksUpdater struct {
-	db *DBConnection
+	db                 *DBConnection
 	behaviorProcessors map[string]BehaviorProcessor
 }
 
@@ -17,7 +17,7 @@ func NewAsyncTasksUpdater(db *DBConnection) *AsyncTasksUpdater {
 	processors := make(map[string]BehaviorProcessor)
 
 	updater := &AsyncTasksUpdater{
-		db: db,
+		db:                 db,
 		behaviorProcessors: processors,
 	}
 

@@ -7,8 +7,8 @@ import (
 	"github.com/cyverse-de/dbutil"
 	"github.com/lib/pq"
 
-	"fmt"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 

@@ -3,12 +3,12 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"github.com/gorilla/mux"
-	"net/http"
-	"time"
 	"fmt"
+	"github.com/gorilla/mux"
 	"io"
 	"io/ioutil"
+	"net/http"
+	"time"
 )
 
 const hundredMiB = 104857600
@@ -275,10 +275,10 @@ func (a *AsyncTasksApp) CreateTaskRequest(writer http.ResponseWriter, r *http.Re
 
 func (a *AsyncTasksApp) AddStatusRequest(writer http.ResponseWriter, r *http.Request) {
 	var (
-		id string
-		ok bool
-	        rawstatus AsyncTaskStatus
-		v  = mux.Vars(r)
+		id        string
+		ok        bool
+		rawstatus AsyncTaskStatus
+		v         = mux.Vars(r)
 	)
 
 	if id, ok = v["id"]; !ok {
@@ -338,10 +338,10 @@ func (a *AsyncTasksApp) AddStatusRequest(writer http.ResponseWriter, r *http.Req
 
 func (a *AsyncTasksApp) AddBehaviorRequest(writer http.ResponseWriter, r *http.Request) {
 	var (
-		id string
-		ok bool
-	        rawbehavior AsyncTaskBehavior
-		v  = mux.Vars(r)
+		id          string
+		ok          bool
+		rawbehavior AsyncTaskBehavior
+		v           = mux.Vars(r)
 	)
 
 	if id, ok = v["id"]; !ok {

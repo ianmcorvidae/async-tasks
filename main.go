@@ -1,15 +1,15 @@
 package main
 
 import (
+	"context"
 	_ "expvar"
 	"flag"
 	"fmt"
 	"strings"
 	"time"
-	"context"
 
-	"net/http"
 	"github.com/gorilla/mux"
+	"net/http"
 
 	"github.com/cyverse-de/configurate"
 	"github.com/sirupsen/logrus"
@@ -17,9 +17,9 @@ import (
 )
 
 var log = logrus.WithFields(logrus.Fields{
-        "service": "async-tasks",
-        "art-id":  "async-tasks",
-        "group":   "org.cyverse",
+	"service": "async-tasks",
+	"art-id":  "async-tasks",
+	"group":   "org.cyverse",
 })
 
 func init() {
@@ -37,18 +37,18 @@ func makeRouter() *mux.Router {
 }
 
 func fixAddr(addr string) string {
-        if !strings.HasPrefix(addr, ":") {
-                return fmt.Sprintf(":%s", addr)
-        }
-        return addr
+	if !strings.HasPrefix(addr, ":") {
+		return fmt.Sprintf(":%s", addr)
+	}
+	return addr
 }
 
 func main() {
 	var (
 		cfgPath = flag.String("config", "/etc/iplant/de/async-tasks.yml", "The path to the config file")
 		port    = flag.String("port", "60000", "The port number to listen on")
-		err error
-		cfg *viper.Viper
+		err     error
+		cfg     *viper.Viper
 	)
 
 	flag.Parse()
@@ -69,8 +69,8 @@ func main() {
 	}
 	defer db.db.Close()
 
-	row := db.db.QueryRow("SELECT COUNT(*) FROM async_tasks");
-	var res struct{count int}
+	row := db.db.QueryRow("SELECT COUNT(*) FROM async_tasks")
+	var res struct{ count int }
 	row.Scan(&res)
 	log.Infof("There are %d async tasks in the database", res.count)
 
