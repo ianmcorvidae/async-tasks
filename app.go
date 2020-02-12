@@ -138,10 +138,11 @@ func (a *AsyncTasksApp) GetByFilterRequest(writer http.ResponseWriter, r *http.R
 		v = r.URL.Query()
 
 		filters = database.TaskFilter{
-			IDs:       v["id"],
-			Types:     v["type"],
-			Statuses:  v["status"],
-			Usernames: v["username"],
+			IDs:           v["id"],
+			Types:         v["type"],
+			Statuses:      v["status"],
+			BehaviorTypes: v["behavior_types"],
+			Usernames:     v["username"],
 		}
 		start_date_since  = v["start_date_since"]
 		start_date_before = v["start_date_before"]
@@ -198,8 +199,6 @@ func (a *AsyncTasksApp) GetByFilterRequest(writer http.ResponseWriter, r *http.R
 	defer tx.Rollback()
 
 	tasks, err := tx.GetTasksByFilter(filters)
-
-	log.Info(tasks)
 
 	jsoned, err := json.Marshal(tasks)
 	if err != nil {

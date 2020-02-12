@@ -249,6 +249,7 @@ type TaskFilter struct {
 	EndDateBefore   []time.Time
 	IncludeNullEnd  bool
 	Statuses        []string
+	BehaviorTypes   []string
 }
 
 // GetTasksByFilter fetches a set of tasks by a set of provided filters
@@ -328,6 +329,13 @@ func (t *DBTx) GetTasksByFilter(filters TaskFilter) ([]model.AsyncTask, error) {
 		query = query + " JOIN async_task_status ON (async_task_status.async_task_id = async_tasks.id AND async_task_status.created_date = (select max(created_date) FROM async_task_status WHERE async_task_id = async_tasks.id))"
 		wheres = append(wheres, fmt.Sprintf(" status = ANY($%d)", currentIndex))
 		args = append(args, pq.Array(filters.Statuses))
+		currentIndex = currentIndex + 1
+	}
+
+	if len(filters.BehaviorTypes) > 0 {
+		query = query + " JOIN (SELECT async_task_id, ARRAY_AGG(behavior_type) AS behavior_types FROM async_task_behavior GROUP BY async_task_id) AS behaviors ON (behaviors.async_task_id = async_tasks.id)"
+		wheres = append(wheres, fmt.Sprintf(" behavior_types && $%d", currentIndex))
+		args = append(args, pq.Array(filters.BehaviorTypes))
 		currentIndex = currentIndex + 1
 	}
 
