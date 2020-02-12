@@ -5,9 +5,10 @@ import (
 	"sync"
 	"time"
 	"github.com/cyverse-de/async-tasks/database"
+	"github.com/sirupsen/logrus"
 )
 
-type BehaviorProcessor func(ctx context.Context, tickerTime time.Time, db *database.DBConnection) error
+type BehaviorProcessor func(ctx context.Context, log *logrus.Entry, tickerTime time.Time, db *database.DBConnection) error
 
 type AsyncTasksUpdater struct {
 	db                 *database.DBConnection
@@ -36,7 +37,7 @@ func (u *AsyncTasksUpdater) DoPeriodicUpdate(ctx context.Context, tickerTime tim
 		go func(ctx context.Context, behaviorType string, processor BehaviorProcessor, tickerTime time.Time, db *database.DBConnection, wg *sync.WaitGroup) {
 			defer wg.Done()
 			log.Infof("Processing behavior type %s for time %s", behaviorType, tickerTime)
-			err := processor(ctx, tickerTime, db)
+			err := processor(ctx, log, tickerTime, db)
 			if err != nil {
 				log.Error(err)
 			}

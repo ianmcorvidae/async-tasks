@@ -13,6 +13,8 @@ import (
 
 	"github.com/cyverse-de/async-tasks/database"
 
+	"github.com/cyverse-de/async-tasks/behaviors/statuschangetimeout"
+
 	"github.com/cyverse-de/configurate"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
@@ -79,6 +81,8 @@ func main() {
 
 	// Make periodic updater
 	updater := NewAsyncTasksUpdater(db)
+	updater.AddBehavior("statuschangetimeout", statuschangetimeout.Processor)
+
 	ticker := time.NewTicker(30 * time.Second) // twice a minute means minutely updates behave basically decently, if we need faster we can change this
 	defer ticker.Stop()
 
