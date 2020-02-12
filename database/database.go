@@ -4,28 +4,28 @@ import (
 	"context"
 
 	"database/sql"
+	"github.com/cyverse-de/async-tasks/model"
 	"github.com/cyverse-de/dbutil"
 	"github.com/lib/pq"
-	"github.com/cyverse-de/async-tasks/model"
 
 	"errors"
 	"fmt"
+	"github.com/sirupsen/logrus"
 	"strings"
 	"time"
-        "github.com/sirupsen/logrus"
 
 	"encoding/json"
 )
 
 // DBConnection wraps a sql.DB
 type DBConnection struct {
-	db *sql.DB
+	db  *sql.DB
 	log *logrus.Entry
 }
 
 // DBTx wraps a sql.Tx for this DB
 type DBTx struct {
-	tx *sql.Tx
+	tx  *sql.Tx
 	log *logrus.Entry
 }
 
@@ -62,7 +62,7 @@ func (d *DBConnection) Close() error {
 // GetCount gets a count of async tasks in the DB
 func (d *DBConnection) GetCount() (int64, error) {
 	row := d.db.QueryRow("SELECT COUNT(*) FROM async_tasks")
-	var res struct { count int64 }
+	var res struct{ count int64 }
 	err := row.Scan(&res.count)
 	if err != nil {
 		return 0, err

@@ -4,13 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/cyverse-de/async-tasks/database"
+	"github.com/cyverse-de/async-tasks/model"
 	"github.com/gorilla/mux"
 	"io"
 	"io/ioutil"
 	"net/http"
 	"time"
-	"github.com/cyverse-de/async-tasks/database"
-	"github.com/cyverse-de/async-tasks/model"
 )
 
 const hundredMiB = 104857600

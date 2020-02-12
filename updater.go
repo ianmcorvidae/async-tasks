@@ -2,10 +2,10 @@ package main
 
 import (
 	"context"
-	"sync"
-	"time"
 	"github.com/cyverse-de/async-tasks/database"
 	"github.com/sirupsen/logrus"
+	"sync"
+	"time"
 )
 
 type BehaviorProcessor func(ctx context.Context, log *logrus.Entry, tickerTime time.Time, db *database.DBConnection) error

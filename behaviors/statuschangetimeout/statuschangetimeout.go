@@ -2,9 +2,9 @@ package statuschangetimeout
 
 import (
 	"context"
-	"time"
 	"github.com/cyverse-de/async-tasks/database"
 	"github.com/sirupsen/logrus"
+	"time"
 )
 
 func Processor(_ context.Context, log *logrus.Entry, _ time.Time, db *database.DBConnection) error {
