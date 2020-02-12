@@ -3,9 +3,16 @@ package statuschangetimeout
 import (
 	"context"
 	"github.com/cyverse-de/async-tasks/database"
+	"github.com/mitchellh/mapstructure"
 	"github.com/sirupsen/logrus"
 	"time"
 )
+
+type StatusChangeTimeoutData struct {
+	StartStatus string `mapstructure:"start_status"`
+	EndStatus   string `mapstructure:"end_status"`
+	Timeout     string `mapstructure:"timeout"`
+}
 
 func Processor(ctx context.Context, log *logrus.Entry, _ time.Time, db *database.DBConnection) error {
 	filter := database.TaskFilter{
@@ -23,6 +30,60 @@ func Processor(ctx context.Context, log *logrus.Entry, _ time.Time, db *database
 		return err
 	}
 
-	log.Infof("Tasks with statuschangetimeout behavior: %s", tasks)
+	log.Infof("Tasks with statuschangetimeout behavior: %d", len(tasks))
+
+	for _, task := range tasks {
+		select {
+		// If the context is cancelled, don't bother
+		case <-ctx.Done():
+			continue
+		default:
+		}
+
+		fullTask, err := tx.GetTask(task.ID)
+		if err != nil {
+			log.Error(err)
+			continue
+		}
+
+		var taskData StatusChangeTimeoutData
+		for _, behavior := range fullTask.Behaviors {
+			if behavior.BehaviorType == "statuschangetimeout" {
+				err := mapstructure.Decode(behavior.Data, &taskData)
+				if err != nil {
+					log.Error(err)
+				}
+				break
+			}
+		}
+
+		timeout, err := time.ParseDuration(taskData.Timeout)
+		if err != nil {
+			log.Error(err)
+			continue
+		}
+
+		var comparisonTimestamp time.Time
+		var comparisonStatus string
+		if len(fullTask.Statuses) == 0 {
+			comparisonTimestamp = *fullTask.StartDate
+		} else {
+			for _, status := range fullTask.Statuses {
+				if status.CreatedDate.After(comparisonTimestamp) {
+					comparisonTimestamp = status.CreatedDate
+					comparisonStatus = status.Status
+				}
+			}
+		}
+
+		log.Info(comparisonTimestamp)
+
+		if comparisonTimestamp.Add(timeout).Before(time.Now()) && comparisonStatus == taskData.StartStatus {
+			log.Infof("would update task given time %s and status %s, timeout/start %s/%s", comparisonTimestamp, comparisonStatus, timeout, taskData.StartStatus)
+		} else {
+			log.Infof("would NOT update given time %s and status %s, timeout/start %s/%s", comparisonTimestamp, comparisonStatus, timeout, taskData.StartStatus)
+		}
+	}
+
 	return nil
 }
