@@ -11,6 +11,8 @@ import (
 	"github.com/gorilla/mux"
 	"net/http"
 
+	"github.com/cyverse-de/async-tasks/database"
+
 	"github.com/cyverse-de/configurate"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
@@ -63,16 +65,17 @@ func main() {
 
 	dburi := cfg.GetString("db.uri")
 
-	db, err := SetupDB(dburi)
+	db, err := database.SetupDB(dburi, log)
 	if err != nil {
 		log.Fatal(err.Error())
 	}
-	defer db.db.Close()
+	defer db.Close()
 
-	row := db.db.QueryRow("SELECT COUNT(*) FROM async_tasks")
-	var res struct{ count int }
-	row.Scan(&res)
-	log.Infof("There are %d async tasks in the database", res.count)
+	count, err := db.GetCount()
+	if err != nil {
+		log.Fatal(err.Error())
+	}
+	log.Infof("There are %d async tasks in the database", count)
 
 	// Make periodic updater
 	updater := NewAsyncTasksUpdater(db)
@@ -87,7 +90,7 @@ func main() {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 
-			err := updater.DoPeriodicUpdate(ctx, t)
+			err := updater.DoPeriodicUpdate(ctx, t, db)
 			if err != nil {
 				log.Error(err)
 			}

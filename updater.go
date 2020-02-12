@@ -4,16 +4,17 @@ import (
 	"context"
 	"sync"
 	"time"
+	"github.com/cyverse-de/async-tasks/database"
 )
 
-type BehaviorProcessor func(ctx context.Context, tickerTime time.Time) error
+type BehaviorProcessor func(ctx context.Context, tickerTime time.Time, db *database.DBConnection) error
 
 type AsyncTasksUpdater struct {
-	db                 *DBConnection
+	db                 *database.DBConnection
 	behaviorProcessors map[string]BehaviorProcessor
 }
 
-func NewAsyncTasksUpdater(db *DBConnection) *AsyncTasksUpdater {
+func NewAsyncTasksUpdater(db *database.DBConnection) *AsyncTasksUpdater {
 	processors := make(map[string]BehaviorProcessor)
 
 	updater := &AsyncTasksUpdater{
@@ -24,7 +25,7 @@ func NewAsyncTasksUpdater(db *DBConnection) *AsyncTasksUpdater {
 	return updater
 }
 
-func (u *AsyncTasksUpdater) DoPeriodicUpdate(ctx context.Context, tickerTime time.Time) error {
+func (u *AsyncTasksUpdater) DoPeriodicUpdate(ctx context.Context, tickerTime time.Time, db *database.DBConnection) error {
 	log.Infof("Running update with time %s", tickerTime)
 
 	var wg sync.WaitGroup
@@ -32,15 +33,15 @@ func (u *AsyncTasksUpdater) DoPeriodicUpdate(ctx context.Context, tickerTime tim
 	wg.Add(1) // add this so there's always at least one thing in the work group
 	for behaviorType, processor := range u.behaviorProcessors {
 		wg.Add(1)
-		go func(ctx context.Context, behaviorType string, processor BehaviorProcessor, tickerTime time.Time, wg *sync.WaitGroup) {
+		go func(ctx context.Context, behaviorType string, processor BehaviorProcessor, tickerTime time.Time, db *database.DBConnection, wg *sync.WaitGroup) {
 			defer wg.Done()
 			log.Infof("Processing behavior type %s for time %s", behaviorType, tickerTime)
-			err := processor(ctx, tickerTime)
+			err := processor(ctx, tickerTime, db)
 			if err != nil {
 				log.Error(err)
 			}
 			log.Infof("Done processing behavior type %s for time %s", behaviorType, tickerTime)
-		}(ctx, behaviorType, processor, tickerTime, &wg)
+		}(ctx, behaviorType, processor, tickerTime, db, &wg)
 	}
 	wg.Done() // finish our dummy entry in the work group
 	wg.Wait()

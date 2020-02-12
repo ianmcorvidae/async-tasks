@@ -1,4 +1,4 @@
-package main
+package database
 
 import (
 	"context"
@@ -6,11 +6,13 @@ import (
 	"database/sql"
 	"github.com/cyverse-de/dbutil"
 	"github.com/lib/pq"
+	"github.com/cyverse-de/async-tasks/model"
 
 	"errors"
 	"fmt"
 	"strings"
 	"time"
+        "github.com/sirupsen/logrus"
 
 	"encoding/json"
 )
@@ -18,15 +20,17 @@ import (
 // DBConnection wraps a sql.DB
 type DBConnection struct {
 	db *sql.DB
+	log *logrus.Entry
 }
 
 // DBTx wraps a sql.Tx for this DB
 type DBTx struct {
 	tx *sql.Tx
+	log *logrus.Entry
 }
 
 // SetupDB initializes a DBConnection for the given dbURI
-func SetupDB(dbURI string) (*DBConnection, error) {
+func SetupDB(dbURI string, log *logrus.Entry) (*DBConnection, error) {
 	log.Info("Connecting to the database...")
 
 	connector, err := dbutil.NewDefaultConnector("1m")
@@ -47,7 +51,23 @@ func SetupDB(dbURI string) (*DBConnection, error) {
 
 	log.Info("Successfully pinged the database")
 
-	return &DBConnection{db: db}, nil
+	return &DBConnection{db: db, log: log}, nil
+}
+
+// Close defers to sql.DB Close()
+func (d *DBConnection) Close() error {
+	return d.db.Close()
+}
+
+// GetCount gets a count of async tasks in the DB
+func (d *DBConnection) GetCount() (int64, error) {
+	row := d.db.QueryRow("SELECT COUNT(*) FROM async_tasks")
+	var res struct { count int64 }
+	err := row.Scan(&res.count)
+	if err != nil {
+		return 0, err
+	}
+	return res.count, nil
 }
 
 // BeginTx starts a DBTx for the given DBConnection
@@ -56,11 +76,21 @@ func (d *DBConnection) BeginTx(ctx context.Context, opts *sql.TxOptions) (*DBTx,
 	if err != nil {
 		return nil, err
 	}
-	return &DBTx{tx: tx}, nil
+	return &DBTx{tx: tx, log: d.log}, nil
+}
+
+// Rollback defers to underlying Rollback
+func (t *DBTx) Rollback() error {
+	return t.tx.Rollback()
+}
+
+// Commit defers to underlying Commit
+func (t *DBTx) Commit() error {
+	return t.tx.Commit()
 }
 
 // GetBaseTask fetches a task from the database by ID (sans behaviors/statuses)
-func (t *DBTx) GetBaseTask(id string) (*AsyncTask, error) {
+func (t *DBTx) GetBaseTask(id string) (*model.AsyncTask, error) {
 	query := `SELECT id, type, username, data,
 	                 start_date at time zone (select current_setting('TIMEZONE')) AS start_date,
 			 end_date at time zone (select current_setting('TIMEZONE')) AS end_date
@@ -72,7 +102,7 @@ func (t *DBTx) GetBaseTask(id string) (*AsyncTask, error) {
 	}
 	defer rows.Close()
 
-	var dbtask DBTask
+	var dbtask model.DBTask
 	for rows.Next() {
 		if err := rows.Scan(&dbtask.ID, &dbtask.Type, &dbtask.Username, &dbtask.Data, &dbtask.StartDate, &dbtask.EndDate); err != nil {
 			return nil, err
@@ -86,9 +116,9 @@ func (t *DBTx) GetBaseTask(id string) (*AsyncTask, error) {
 	return makeTask(dbtask)
 }
 
-func makeTask(dbtask DBTask) (*AsyncTask, error) {
+func makeTask(dbtask model.DBTask) (*model.AsyncTask, error) {
 	var err error
-	task := &AsyncTask{ID: dbtask.ID, Type: dbtask.Type}
+	task := &model.AsyncTask{ID: dbtask.ID, Type: dbtask.Type}
 
 	if dbtask.Username.Valid {
 		task.Username = dbtask.Username.String
@@ -129,7 +159,7 @@ func (t *DBTx) DeleteTask(id string) error {
 }
 
 // GetTask fetches a task from the database by ID, including behaviors and statuses
-func (t *DBTx) GetTask(id string) (*AsyncTask, error) {
+func (t *DBTx) GetTask(id string) (*model.AsyncTask, error) {
 	task, err := t.GetBaseTask(id)
 	if err != nil {
 		return task, err
@@ -151,7 +181,7 @@ func (t *DBTx) GetTask(id string) (*AsyncTask, error) {
 }
 
 // GetTaskBehaviors fetches a task's set of behaviors from the DB by ID
-func (t *DBTx) GetTaskBehaviors(id string) ([]AsyncTaskBehavior, error) {
+func (t *DBTx) GetTaskBehaviors(id string) ([]model.AsyncTaskBehavior, error) {
 	query := `SELECT behavior_type, data FROM async_task_behavior WHERE async_task_id::text = $1`
 
 	rows, err := t.tx.Query(query, id)
@@ -160,14 +190,14 @@ func (t *DBTx) GetTaskBehaviors(id string) ([]AsyncTaskBehavior, error) {
 	}
 	defer rows.Close()
 
-	var behaviors []AsyncTaskBehavior
+	var behaviors []model.AsyncTaskBehavior
 	for rows.Next() {
-		var dbbehavior DBTaskBehavior
+		var dbbehavior model.DBTaskBehavior
 		if err := rows.Scan(&dbbehavior.BehaviorType, &dbbehavior.Data); err != nil {
 			return nil, err
 		}
 
-		behavior := AsyncTaskBehavior{BehaviorType: dbbehavior.BehaviorType}
+		behavior := model.AsyncTaskBehavior{BehaviorType: dbbehavior.BehaviorType}
 		if dbbehavior.Data.Valid {
 			jsonData := make(map[string]interface{})
 
@@ -186,7 +216,7 @@ func (t *DBTx) GetTaskBehaviors(id string) ([]AsyncTaskBehavior, error) {
 }
 
 // GetTaskStatuses fetches a tasks's list of statuses from the DB by ID, ordered by creation date
-func (t *DBTx) GetTaskStatuses(id string) ([]AsyncTaskStatus, error) {
+func (t *DBTx) GetTaskStatuses(id string) ([]model.AsyncTaskStatus, error) {
 	query := `SELECT status, created_date at time zone (select current_setting('TIMEZONE')) AS created_date
 	            FROM async_task_status WHERE async_task_id::text = $1 ORDER BY created_date ASC`
 
@@ -196,9 +226,9 @@ func (t *DBTx) GetTaskStatuses(id string) ([]AsyncTaskStatus, error) {
 	}
 	defer rows.Close()
 
-	var statuses []AsyncTaskStatus
+	var statuses []model.AsyncTaskStatus
 	for rows.Next() {
-		var status AsyncTaskStatus
+		var status model.AsyncTaskStatus
 		if err := rows.Scan(&status.Status, &status.CreatedDate); err != nil {
 			return nil, err
 		}
@@ -222,10 +252,10 @@ type TaskFilter struct {
 }
 
 // GetTasksByFilter fetches a set of tasks by a set of provided filters
-func (t *DBTx) GetTasksByFilter(filters TaskFilter) ([]AsyncTask, error) {
-	log.Info(filters)
+func (t *DBTx) GetTasksByFilter(filters TaskFilter) ([]model.AsyncTask, error) {
+	t.log.Info(filters)
 
-	var tasks []AsyncTask
+	var tasks []model.AsyncTask
 	var args []interface{}
 	var wheres []string
 
@@ -256,7 +286,7 @@ func (t *DBTx) GetTasksByFilter(filters TaskFilter) ([]AsyncTask, error) {
 
 	if len(filters.StartDateSince) > 0 {
 		if len(filters.StartDateSince) > 1 {
-			log.Warn("More than one start_date_since filter is unsupported. Only the oldest date will be considered.")
+			t.log.Warn("More than one start_date_since filter is unsupported. Only the oldest date will be considered.")
 		}
 		wheres = append(wheres, fmt.Sprintf(" start_date > ANY($%d)", currentIndex))
 		args = append(args, pq.Array(filters.StartDateSince))
@@ -265,7 +295,7 @@ func (t *DBTx) GetTasksByFilter(filters TaskFilter) ([]AsyncTask, error) {
 
 	if len(filters.StartDateBefore) > 0 {
 		if len(filters.StartDateBefore) > 1 {
-			log.Warn("More than one start_date_before filter is unsupported. Only the newest date will be considered.")
+			t.log.Warn("More than one start_date_before filter is unsupported. Only the newest date will be considered.")
 		}
 		wheres = append(wheres, fmt.Sprintf(" start_date < ANY($%d)", currentIndex))
 		args = append(args, pq.Array(filters.StartDateBefore))
@@ -274,7 +304,7 @@ func (t *DBTx) GetTasksByFilter(filters TaskFilter) ([]AsyncTask, error) {
 
 	if len(filters.EndDateSince) > 0 {
 		if len(filters.EndDateSince) > 1 {
-			log.Warn("More than one end_date_since filter is unsupported. Only the oldest date will be considered.")
+			t.log.Warn("More than one end_date_since filter is unsupported. Only the oldest date will be considered.")
 		}
 		if filters.IncludeNullEnd {
 			wheres = append(wheres, fmt.Sprintf(" (end_date > ANY($%d) OR end_date IS NULL)", currentIndex))
@@ -287,7 +317,7 @@ func (t *DBTx) GetTasksByFilter(filters TaskFilter) ([]AsyncTask, error) {
 
 	if len(filters.EndDateBefore) > 0 {
 		if len(filters.EndDateBefore) > 1 {
-			log.Warn("More than one end_date_before filter is unsupported. Only the newest date will be considered.")
+			t.log.Warn("More than one end_date_before filter is unsupported. Only the newest date will be considered.")
 		}
 		wheres = append(wheres, fmt.Sprintf(" end_date < ANY($%d)", currentIndex))
 		args = append(args, pq.Array(filters.EndDateBefore))
@@ -312,7 +342,7 @@ func (t *DBTx) GetTasksByFilter(filters TaskFilter) ([]AsyncTask, error) {
 	defer rows.Close()
 
 	for rows.Next() {
-		var dbtask DBTask
+		var dbtask model.DBTask
 		if err := rows.Scan(&dbtask.ID, &dbtask.Type, &dbtask.Username, &dbtask.Data, &dbtask.StartDate, &dbtask.EndDate); err != nil {
 			return nil, err
 		}
@@ -333,7 +363,7 @@ func (t *DBTx) GetTasksByFilter(filters TaskFilter) ([]AsyncTask, error) {
 }
 
 // InsertTask inserts a provided AsyncTask into the DB and returns the task's generated ID as a string
-func (t *DBTx) InsertTask(task AsyncTask) (string, error) {
+func (t *DBTx) InsertTask(task model.AsyncTask) (string, error) {
 	var columns []string
 	var placeholders []string
 	var args []interface{}
@@ -423,7 +453,7 @@ func (t *DBTx) InsertTask(task AsyncTask) (string, error) {
 }
 
 // InsertTaskStatus inserts a provided AsyncTaskStatus into the DB for the provided async task ID
-func (t *DBTx) InsertTaskStatus(status AsyncTaskStatus, taskID string) error {
+func (t *DBTx) InsertTaskStatus(status model.AsyncTaskStatus, taskID string) error {
 	var query string
 	var args []interface{}
 
@@ -455,7 +485,7 @@ func (t *DBTx) InsertTaskStatus(status AsyncTaskStatus, taskID string) error {
 }
 
 // InsertTaskBehavior inserts a provided AsyncTaskBehavior into the DB for the provided async task ID
-func (t *DBTx) InsertTaskBehavior(behavior AsyncTaskBehavior, taskID string) error {
+func (t *DBTx) InsertTaskBehavior(behavior model.AsyncTaskBehavior, taskID string) error {
 	var query string
 	var args []interface{}
 
