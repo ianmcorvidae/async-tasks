@@ -3,8 +3,10 @@ package statuschangetimeout
 import (
 	"context"
 	"github.com/cyverse-de/async-tasks/database"
+	"github.com/cyverse-de/async-tasks/model"
 	"github.com/mitchellh/mapstructure"
 	"github.com/sirupsen/logrus"
+	"github.com/pkg/errors"
 	"time"
 )
 
@@ -33,6 +35,9 @@ func Processor(ctx context.Context, log *logrus.Entry, _ time.Time, db *database
 	log.Infof("Tasks with statuschangetimeout behavior: %d", len(tasks))
 
 	for _, task := range tasks {
+		// rollback here before creating a new tx below, whatever tx is set to now
+		tx.Rollback()
+
 		select {
 		// If the context is cancelled, don't bother
 		case <-ctx.Done():
@@ -40,9 +45,14 @@ func Processor(ctx context.Context, log *logrus.Entry, _ time.Time, db *database
 		default:
 		}
 
+		tx, err = db.BeginTx(ctx, nil)
+		if err != nil {
+			return err
+		}
+
 		fullTask, err := tx.GetTask(task.ID)
 		if err != nil {
-			log.Error(err)
+			log.Error(errors.Wrap(err, "failed getting task"))
 			continue
 		}
 
@@ -51,7 +61,7 @@ func Processor(ctx context.Context, log *logrus.Entry, _ time.Time, db *database
 			if behavior.BehaviorType == "statuschangetimeout" {
 				err := mapstructure.Decode(behavior.Data, &taskData)
 				if err != nil {
-					log.Error(err)
+					log.Error(errors.Wrap(err, "failed decoding behavior"))
 				}
 				break
 			}
@@ -59,7 +69,7 @@ func Processor(ctx context.Context, log *logrus.Entry, _ time.Time, db *database
 
 		timeout, err := time.ParseDuration(taskData.Timeout)
 		if err != nil {
-			log.Error(err)
+			log.Error(errors.Wrap(err, "failed parsing timeout duration"))
 			continue
 		}
 
@@ -79,11 +89,21 @@ func Processor(ctx context.Context, log *logrus.Entry, _ time.Time, db *database
 		log.Info(comparisonTimestamp)
 
 		if comparisonTimestamp.Add(timeout).Before(time.Now()) && comparisonStatus == taskData.StartStatus {
-			log.Infof("would update task given time %s and status %s, timeout/start %s/%s", comparisonTimestamp, comparisonStatus, timeout, taskData.StartStatus)
+			newstatus := model.AsyncTaskStatus{Status: taskData.EndStatus}
+			err = tx.InsertTaskStatus(newstatus, task.ID)
+			if err != nil {
+				log.Error(errors.Wrap(err, "failed inserting task status"))
+				continue
+			}
+			tx.Commit()
+			log.Infof("updated task given time %s and status %s, timeout/start %s/%s", comparisonTimestamp, comparisonStatus, timeout, taskData.StartStatus)
 		} else {
 			log.Infof("would NOT update given time %s and status %s, timeout/start %s/%s", comparisonTimestamp, comparisonStatus, timeout, taskData.StartStatus)
 		}
 	}
+
+	// just in case
+	tx.Rollback()
 
 	return nil
 }
