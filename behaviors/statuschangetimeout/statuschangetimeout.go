@@ -37,26 +37,6 @@ func processSingleTask(ctx context.Context, log *logrus.Entry, db *database.DBCo
 		return err
 	}
 
-	var taskData StatusChangeTimeoutData
-	for _, behavior := range fullTask.Behaviors {
-		// XXX: currently only does the first statuschangetimeout, should do all of them (possibly repeatedly, until none does anything)
-		if behavior.BehaviorType == "statuschangetimeout" {
-			err := mapstructure.Decode(behavior.Data, &taskData)
-			if err != nil {
-				// don't die here, let it try other behaviors
-				log.Error(errors.Wrap(err, "failed decoding behavior"))
-			}
-			break
-		}
-	}
-
-	timeout, err := time.ParseDuration(taskData.Timeout)
-	if err != nil {
-		err = errors.Wrap(err, "failed parsing timeout duration")
-		log.Error(err)
-		return err
-	}
-
 	var comparisonTimestamp time.Time
 	var comparisonStatus string
 	if len(fullTask.Statuses) == 0 {
@@ -70,21 +50,46 @@ func processSingleTask(ctx context.Context, log *logrus.Entry, db *database.DBCo
 		}
 	}
 
-	log.Info(comparisonTimestamp)
+	log.Infof("Most recent timestamp for task: %s", comparisonTimestamp)
 
-	if comparisonTimestamp.Add(timeout).Before(time.Now()) && comparisonStatus == taskData.StartStatus {
-		newstatus := model.AsyncTaskStatus{Status: taskData.EndStatus}
-		err = tx.InsertTaskStatus(newstatus, ID)
-		if err != nil {
-			err = errors.Wrap(err, "failed inserting task status")
-			log.Error(err)
-			return err
+	for _, behavior := range fullTask.Behaviors {
+		// does each behavior only once, which may not be ideal if
+		// there is a chain of behaviors with sufficiently short
+		// timeouts. this is unlikely enough I'm not sure it matters
+		// though, especially with the ticker at 30s or such anyway
+		if behavior.BehaviorType == "statuschangetimeout" {
+			var taskData StatusChangeTimeoutData
+			err := mapstructure.Decode(behavior.Data, &taskData)
+			if err != nil {
+				// don't die here, let it try other behaviors
+				log.Error(errors.Wrap(err, "failed decoding behavior"))
+				continue
+			}
+
+			timeout, err := time.ParseDuration(taskData.Timeout)
+			if err != nil {
+				// don't die here, let it try other behaviors
+				log.Error(errors.Wrap(err, "failed parsing timeout duration"))
+				continue
+			}
+
+			if comparisonTimestamp.Add(timeout).Before(time.Now()) && comparisonStatus == taskData.StartStatus {
+				newstatus := model.AsyncTaskStatus{Status: taskData.EndStatus}
+				err = tx.InsertTaskStatus(newstatus, ID)
+				if err != nil {
+					// do die here, because the transaction is probably dead
+					err = errors.Wrap(err, "failed inserting task status")
+					log.Error(err)
+					return err
+				}
+				log.Infof("Updated task with time %s and timeout %s from '%s' to '%s'", comparisonTimestamp, timeout, comparisonStatus, taskData.EndStatus)
+			} else {
+				log.Infof("Task was not ready to update given time %s, timeout %s, and status '%s'", comparisonTimestamp, timeout, comparisonStatus)
+			}
 		}
-		tx.Commit()
-		log.Infof("updated task given time %s and status %s, timeout/start %s/%s", comparisonTimestamp, comparisonStatus, timeout, taskData.StartStatus)
-	} else {
-		log.Infof("would NOT update given time %s and status %s, timeout/start %s/%s", comparisonTimestamp, comparisonStatus, timeout, taskData.StartStatus)
 	}
+
+	tx.Commit()
 
 	return nil
 }
