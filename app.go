@@ -67,7 +67,7 @@ func (a *AsyncTasksApp) GetByIdRequest(writer http.ResponseWriter, r *http.Reque
 	}
 	defer tx.Rollback()
 
-	task, err := tx.GetTask(id)
+	task, err := tx.GetTask(id, false)
 	if err != nil {
 		errored(writer, err.Error())
 		return
@@ -112,7 +112,7 @@ func (a *AsyncTasksApp) DeleteByIdRequest(writer http.ResponseWriter, r *http.Re
 	}
 	defer tx.Rollback()
 
-	task, err := tx.GetTask(id)
+	task, err := tx.GetTask(id, true)
 	if err != nil {
 		errored(writer, err.Error())
 		return
@@ -296,7 +296,7 @@ func (a *AsyncTasksApp) AddStatusRequest(writer http.ResponseWriter, r *http.Req
 	}
 	defer tx.Rollback()
 
-	task, err := tx.GetTask(id)
+	task, err := tx.GetTask(id, true)
 	if err != nil {
 		errored(writer, err.Error())
 		return
@@ -359,7 +359,7 @@ func (a *AsyncTasksApp) AddBehaviorRequest(writer http.ResponseWriter, r *http.R
 	}
 	defer tx.Rollback()
 
-	task, err := tx.GetTask(id)
+	task, err := tx.GetTask(id, true)
 	if err != nil {
 		errored(writer, err.Error())
 		return

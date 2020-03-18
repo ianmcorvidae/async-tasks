@@ -30,7 +30,7 @@ func processSingleTask(ctx context.Context, log *logrus.Entry, db *database.DBCo
 	}
 	defer tx.Rollback()
 
-	fullTask, err := tx.GetTask(ID)
+	fullTask, err := tx.GetTask(ID, true)
 	if err != nil {
 		err = errors.Wrap(err, "failed getting task")
 		log.Error(err)

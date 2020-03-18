@@ -90,11 +90,15 @@ func (t *DBTx) Commit() error {
 }
 
 // GetBaseTask fetches a task from the database by ID (sans behaviors/statuses)
-func (t *DBTx) GetBaseTask(id string) (*model.AsyncTask, error) {
+func (t *DBTx) GetBaseTask(id string, forUpdate bool) (*model.AsyncTask, error) {
 	query := `SELECT id, type, username, data,
 	                 start_date at time zone (select current_setting('TIMEZONE')) AS start_date,
 			 end_date at time zone (select current_setting('TIMEZONE')) AS end_date
 	            FROM async_tasks WHERE id::text = $1`
+
+	if forUpdate {
+		query = query + ` FOR UPDATE`
+	}
 
 	rows, err := t.tx.Query(query, id)
 	if err != nil {
@@ -159,19 +163,19 @@ func (t *DBTx) DeleteTask(id string) error {
 }
 
 // GetTask fetches a task from the database by ID, including behaviors and statuses
-func (t *DBTx) GetTask(id string) (*model.AsyncTask, error) {
-	task, err := t.GetBaseTask(id)
+func (t *DBTx) GetTask(id string, forUpdate bool) (*model.AsyncTask, error) {
+	task, err := t.GetBaseTask(id, forUpdate)
 	if err != nil {
 		return task, err
 	}
 
-	behaviors, err := t.GetTaskBehaviors(id)
+	behaviors, err := t.GetTaskBehaviors(id, forUpdate)
 	if err != nil {
 		return task, err
 	}
 	task.Behaviors = behaviors
 
-	statuses, err := t.GetTaskStatuses(id)
+	statuses, err := t.GetTaskStatuses(id, forUpdate)
 	if err != nil {
 		return task, err
 	}
@@ -181,8 +185,12 @@ func (t *DBTx) GetTask(id string) (*model.AsyncTask, error) {
 }
 
 // GetTaskBehaviors fetches a task's set of behaviors from the DB by ID
-func (t *DBTx) GetTaskBehaviors(id string) ([]model.AsyncTaskBehavior, error) {
+func (t *DBTx) GetTaskBehaviors(id string, forUpdate bool) ([]model.AsyncTaskBehavior, error) {
 	query := `SELECT behavior_type, data FROM async_task_behavior WHERE async_task_id::text = $1`
+
+	if forUpdate {
+		query = query + ` FOR UPDATE`
+	}
 
 	rows, err := t.tx.Query(query, id)
 	if err != nil {
@@ -216,9 +224,13 @@ func (t *DBTx) GetTaskBehaviors(id string) ([]model.AsyncTaskBehavior, error) {
 }
 
 // GetTaskStatuses fetches a tasks's list of statuses from the DB by ID, ordered by creation date
-func (t *DBTx) GetTaskStatuses(id string) ([]model.AsyncTaskStatus, error) {
+func (t *DBTx) GetTaskStatuses(id string, forUpdate bool) ([]model.AsyncTaskStatus, error) {
 	query := `SELECT status, created_date at time zone (select current_setting('TIMEZONE')) AS created_date
 	            FROM async_task_status WHERE async_task_id::text = $1 ORDER BY created_date ASC`
+
+	if forUpdate {
+		query = query + ` FOR UPDATE`
+	}
 
 	rows, err := t.tx.Query(query, id)
 	if err != nil {
