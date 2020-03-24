@@ -37,7 +37,10 @@ func (u *AsyncTasksUpdater) DoPeriodicUpdate(ctx context.Context, tickerTime tim
 		go func(ctx context.Context, behaviorType string, processor BehaviorProcessor, tickerTime time.Time, db *database.DBConnection, wg *sync.WaitGroup) {
 			defer wg.Done()
 			log.Infof("Processing behavior type %s for time %s", behaviorType, tickerTime)
-			err := processor(ctx, log, tickerTime, db)
+			processorLog := log.WithFields(logrus.Fields{
+				"behavior_type": behaviorType,
+			})
+			err := processor(ctx, processorLog, tickerTime, db)
 			if err != nil {
 				log.Error(err)
 			}
