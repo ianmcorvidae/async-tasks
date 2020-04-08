@@ -162,6 +162,24 @@ func (t *DBTx) DeleteTask(id string) error {
 	return nil
 }
 
+// CompleteTask marks a task as ended by setting the end date to now()
+func (t *DBTx) CompleteTask(id string) error {
+	query := `UPDATE async_tasks SET end_date = now() WHERE id = $1`
+
+	rows, err := t.tx.Query(query, id)
+	if err != nil {
+		return err
+	}
+	if err = rows.Err(); err != nil {
+		return err
+	}
+	if err = rows.Close(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 // GetTask fetches a task from the database by ID, including behaviors and statuses
 func (t *DBTx) GetTask(id string, forUpdate bool) (*model.AsyncTask, error) {
 	task, err := t.GetBaseTask(id, forUpdate)

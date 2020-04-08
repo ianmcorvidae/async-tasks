@@ -277,14 +277,20 @@ func (a *AsyncTasksApp) CreateTaskRequest(writer http.ResponseWriter, r *http.Re
 func (a *AsyncTasksApp) AddStatusRequest(writer http.ResponseWriter, r *http.Request) {
 	var (
 		id        string
+		complete  bool
 		ok        bool
 		rawstatus model.AsyncTaskStatus
 		v         = mux.Vars(r)
+		q         = r.URL.Query()
 	)
 
 	if id, ok = v["id"]; !ok {
 		badRequest(writer, "No ID in URL")
 		return
+	}
+
+	if q.Get("complete") != "" {
+		complete = true
 	}
 
 	log.Infof("Fetching async task %s", id)
@@ -326,6 +332,14 @@ func (a *AsyncTasksApp) AddStatusRequest(writer http.ResponseWriter, r *http.Req
 	if err != nil {
 		errored(writer, err.Error())
 		return
+	}
+
+	if complete {
+		err = tx.CompleteTask(id)
+		if err != nil {
+			errored(writer, err.Error())
+			return
+		}
 	}
 
 	tx.Commit()
