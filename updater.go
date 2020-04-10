@@ -60,6 +60,7 @@ func checkOldest(ctx context.Context, behaviorType string, db *database.DBConnec
 
 	filter := database.TaskFilter{
 		Types: []string{fmt.Sprintf("behaviorprocessor-%s", behaviorType)},
+		StartDateSince: []time.Time{time.Now().Add(time.Minute * -12)}, // the timeout is 10 minutes, but add some padding
 		EndDateSince: []time.Time{time.Now().AddDate(1, 0, 0)}, // arbitrary point in the future a ways
 		IncludeNullEnd: true,
 	}
