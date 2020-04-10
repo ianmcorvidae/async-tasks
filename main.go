@@ -91,7 +91,7 @@ func main() {
 			t := <-ticker.C
 			log.Infof("Got periodic timer tick: %s", t)
 
-			ctx, cancel := context.WithTimeout(context.Background(), 10 * time.Minute) // long timeout we can use to clear out totally stuck jobs
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute) // long timeout we can use to clear out totally stuck jobs
 			defer cancel()
 
 			err := updater.DoPeriodicUpdate(ctx, t, db)

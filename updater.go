@@ -2,13 +2,13 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"github.com/cyverse-de/async-tasks/database"
 	"github.com/cyverse-de/async-tasks/model"
-	"github.com/sirupsen/logrus"
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 	"sync"
 	"time"
-	"fmt"
 )
 
 type BehaviorProcessor func(ctx context.Context, log *logrus.Entry, tickerTime time.Time, db *database.DBConnection) error
@@ -34,7 +34,7 @@ func createBehaviorProcessorTask(ctx context.Context, behaviorType string, db *d
 	if err != nil {
 		return "", err
 	}
-	defer tx.Rollback();
+	defer tx.Rollback()
 
 	task := model.AsyncTask{Type: fmt.Sprintf("behaviorprocessor-%s", behaviorType)}
 
@@ -52,16 +52,16 @@ func createBehaviorProcessorTask(ctx context.Context, behaviorType string, db *d
 }
 
 func checkOldest(ctx context.Context, behaviorType string, db *database.DBConnection, taskID string) error {
-        tx, err := db.BeginTx(ctx, nil)
+	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback();
+	defer tx.Rollback()
 
 	filter := database.TaskFilter{
-		Types: []string{fmt.Sprintf("behaviorprocessor-%s", behaviorType)},
+		Types:          []string{fmt.Sprintf("behaviorprocessor-%s", behaviorType)},
 		StartDateSince: []time.Time{time.Now().Add(time.Minute * -12)}, // the timeout is 10 minutes, but add some padding
-		EndDateSince: []time.Time{time.Now().AddDate(1, 0, 0)}, // arbitrary point in the future a ways
+		EndDateSince:   []time.Time{time.Now().AddDate(1, 0, 0)},       // arbitrary point in the future a ways
 		IncludeNullEnd: true,
 	}
 
@@ -98,11 +98,11 @@ func checkAlone(ctx context.Context, behaviorType string, db *database.DBConnect
 }
 
 func finishTask(ctx context.Context, taskID string, db *database.DBConnection) error {
-        tx, err := db.BeginTx(ctx, nil)
+	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback();
+	defer tx.Rollback()
 
 	err = tx.CompleteTask(taskID)
 	if err != nil {
