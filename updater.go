@@ -90,7 +90,7 @@ func checkAlone(ctx context.Context, behaviorType string, db *database.DBConnect
 	// make a task
 	id, err := createBehaviorProcessorTask(ctx, behaviorType, db)
 	if err != nil {
-		return "", err
+		return id, err
 	}
 	// check that we're the right task to continue
 	return id, checkOldest(ctx, behaviorType, db, id)
@@ -126,7 +126,9 @@ func (u *AsyncTasksUpdater) DoPeriodicUpdate(ctx context.Context, tickerTime tim
 			})
 			// check if alone
 			taskID, err := checkAlone(ctx, behaviorType, db)
-			defer finishTask(ctx, taskID, db)
+			if taskID != "" {
+				defer finishTask(ctx, taskID, db)
+			}
 			if err != nil {
 				processorLog.Error(errors.Wrap(err, "We are not the oldest process for this behavior type"))
 				return
