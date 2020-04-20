@@ -1,13 +1,19 @@
 package main
 
 import (
+	"context"
 	_ "expvar"
 	"flag"
 	"fmt"
 	"strings"
+	"time"
 
-	"net/http"
 	"github.com/gorilla/mux"
+	"net/http"
+
+	"github.com/cyverse-de/async-tasks/database"
+
+	"github.com/cyverse-de/async-tasks/behaviors/statuschangetimeout"
 
 	"github.com/cyverse-de/configurate"
 	"github.com/sirupsen/logrus"
@@ -15,9 +21,9 @@ import (
 )
 
 var log = logrus.WithFields(logrus.Fields{
-        "service": "async-tasks",
-        "art-id":  "async-tasks",
-        "group":   "org.cyverse",
+	"service": "async-tasks",
+	"art-id":  "async-tasks",
+	"group":   "org.cyverse",
 })
 
 func init() {
@@ -35,18 +41,18 @@ func makeRouter() *mux.Router {
 }
 
 func fixAddr(addr string) string {
-        if !strings.HasPrefix(addr, ":") {
-                return fmt.Sprintf(":%s", addr)
-        }
-        return addr
+	if !strings.HasPrefix(addr, ":") {
+		return fmt.Sprintf(":%s", addr)
+	}
+	return addr
 }
 
 func main() {
 	var (
 		cfgPath = flag.String("config", "/etc/iplant/de/async-tasks.yml", "The path to the config file")
 		port    = flag.String("port", "60000", "The port number to listen on")
-		err error
-		cfg *viper.Viper
+		err     error
+		cfg     *viper.Viper
 	)
 
 	flag.Parse()
@@ -61,17 +67,41 @@ func main() {
 
 	dburi := cfg.GetString("db.uri")
 
-	db, err := SetupDB(dburi)
+	db, err := database.SetupDB(dburi, log)
 	if err != nil {
 		log.Fatal(err.Error())
 	}
-	defer db.db.Close()
+	defer db.Close()
 
-	row := db.db.QueryRow("SELECT COUNT(*) FROM async_tasks");
-	var res struct{count int}
-	row.Scan(&res)
-	log.Infof("There are %d async tasks in the database", res.count)
+	count, err := db.GetCount()
+	if err != nil {
+		log.Fatal(err.Error())
+	}
+	log.Infof("There are %d async tasks in the database", count)
 
+	// Make periodic updater
+	updater := NewAsyncTasksUpdater(db)
+	updater.AddBehavior("statuschangetimeout", statuschangetimeout.Processor)
+
+	ticker := time.NewTicker(30 * time.Second) // twice a minute means minutely updates behave basically decently, if we need faster we can change this
+	defer ticker.Stop()
+
+	go func() {
+		for {
+			t := <-ticker.C
+			log.Infof("Got periodic timer tick: %s", t)
+
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute) // long timeout we can use to clear out totally stuck jobs
+			defer cancel()
+
+			err := updater.DoPeriodicUpdate(ctx, t, db)
+			if err != nil {
+				log.Error(err)
+			}
+		}
+	}()
+
+	// Make HTTP listeners
 	router := makeRouter()
 
 	app := NewAsyncTasksApp(db, router)

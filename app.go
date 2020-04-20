@@ -3,22 +3,24 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"github.com/gorilla/mux"
-	"net/http"
-	"time"
 	"fmt"
+	"github.com/cyverse-de/async-tasks/database"
+	"github.com/cyverse-de/async-tasks/model"
+	"github.com/gorilla/mux"
 	"io"
 	"io/ioutil"
+	"net/http"
+	"time"
 )
 
 const hundredMiB = 104857600
 
 type AsyncTasksApp struct {
-	db     *DBConnection
+	db     *database.DBConnection
 	router *mux.Router
 }
 
-func NewAsyncTasksApp(db *DBConnection, router *mux.Router) *AsyncTasksApp {
+func NewAsyncTasksApp(db *database.DBConnection, router *mux.Router) *AsyncTasksApp {
 	app := &AsyncTasksApp{
 		db:     db,
 		router: router,
@@ -63,9 +65,9 @@ func (a *AsyncTasksApp) GetByIdRequest(writer http.ResponseWriter, r *http.Reque
 		errored(writer, err.Error())
 		return
 	}
-	defer tx.tx.Rollback()
+	defer tx.Rollback()
 
-	task, err := tx.GetTask(id)
+	task, err := tx.GetTask(id, false)
 	if err != nil {
 		errored(writer, err.Error())
 		return
@@ -108,9 +110,9 @@ func (a *AsyncTasksApp) DeleteByIdRequest(writer http.ResponseWriter, r *http.Re
 		errored(writer, err.Error())
 		return
 	}
-	defer tx.tx.Rollback()
+	defer tx.Rollback()
 
-	task, err := tx.GetTask(id)
+	task, err := tx.GetTask(id, true)
 	if err != nil {
 		errored(writer, err.Error())
 		return
@@ -127,7 +129,7 @@ func (a *AsyncTasksApp) DeleteByIdRequest(writer http.ResponseWriter, r *http.Re
 		return
 	}
 
-	tx.tx.Commit()
+	tx.Commit()
 	return
 }
 
@@ -135,11 +137,12 @@ func (a *AsyncTasksApp) GetByFilterRequest(writer http.ResponseWriter, r *http.R
 	var (
 		v = r.URL.Query()
 
-		filters = TaskFilter{
-			IDs:       v["id"],
-			Types:     v["type"],
-			Statuses:  v["status"],
-			Usernames: v["username"],
+		filters = database.TaskFilter{
+			IDs:           v["id"],
+			Types:         v["type"],
+			Statuses:      v["status"],
+			BehaviorTypes: v["behavior_types"],
+			Usernames:     v["username"],
 		}
 		start_date_since  = v["start_date_since"]
 		start_date_before = v["start_date_before"]
@@ -193,11 +196,9 @@ func (a *AsyncTasksApp) GetByFilterRequest(writer http.ResponseWriter, r *http.R
 		errored(writer, err.Error())
 		return
 	}
-	defer tx.tx.Rollback()
+	defer tx.Rollback()
 
 	tasks, err := tx.GetTasksByFilter(filters)
-
-	log.Info(tasks)
 
 	jsoned, err := json.Marshal(tasks)
 	if err != nil {
@@ -211,7 +212,7 @@ func (a *AsyncTasksApp) GetByFilterRequest(writer http.ResponseWriter, r *http.R
 }
 
 func (a *AsyncTasksApp) CreateTaskRequest(writer http.ResponseWriter, r *http.Request) {
-	var rawtask AsyncTask
+	var rawtask model.AsyncTask
 
 	body, err := ioutil.ReadAll(io.LimitReader(r.Body, hundredMiB))
 	if err != nil {
@@ -254,7 +255,7 @@ func (a *AsyncTasksApp) CreateTaskRequest(writer http.ResponseWriter, r *http.Re
 		errored(writer, err.Error())
 		return
 	}
-	defer tx.tx.Rollback()
+	defer tx.Rollback()
 
 	id, err := tx.InsertTask(rawtask)
 	if err != nil {
@@ -264,7 +265,7 @@ func (a *AsyncTasksApp) CreateTaskRequest(writer http.ResponseWriter, r *http.Re
 
 	log.Info(id)
 
-	tx.tx.Commit()
+	tx.Commit()
 
 	url, _ := a.router.Get("getById").URL("id", id)
 	log.Info(url)
@@ -275,15 +276,21 @@ func (a *AsyncTasksApp) CreateTaskRequest(writer http.ResponseWriter, r *http.Re
 
 func (a *AsyncTasksApp) AddStatusRequest(writer http.ResponseWriter, r *http.Request) {
 	var (
-		id string
-		ok bool
-	        rawstatus AsyncTaskStatus
-		v  = mux.Vars(r)
+		id        string
+		complete  bool
+		ok        bool
+		rawstatus model.AsyncTaskStatus
+		v         = mux.Vars(r)
+		q         = r.URL.Query()
 	)
 
 	if id, ok = v["id"]; !ok {
 		badRequest(writer, "No ID in URL")
 		return
+	}
+
+	if q.Get("complete") != "" {
+		complete = true
 	}
 
 	log.Infof("Fetching async task %s", id)
@@ -293,9 +300,9 @@ func (a *AsyncTasksApp) AddStatusRequest(writer http.ResponseWriter, r *http.Req
 		errored(writer, err.Error())
 		return
 	}
-	defer tx.tx.Rollback()
+	defer tx.Rollback()
 
-	task, err := tx.GetTask(id)
+	task, err := tx.GetTask(id, true)
 	if err != nil {
 		errored(writer, err.Error())
 		return
@@ -327,7 +334,15 @@ func (a *AsyncTasksApp) AddStatusRequest(writer http.ResponseWriter, r *http.Req
 		return
 	}
 
-	tx.tx.Commit()
+	if complete {
+		err = tx.CompleteTask(id)
+		if err != nil {
+			errored(writer, err.Error())
+			return
+		}
+	}
+
+	tx.Commit()
 
 	url, _ := a.router.Get("getById").URL("id", id)
 	log.Info(url)
@@ -338,10 +353,10 @@ func (a *AsyncTasksApp) AddStatusRequest(writer http.ResponseWriter, r *http.Req
 
 func (a *AsyncTasksApp) AddBehaviorRequest(writer http.ResponseWriter, r *http.Request) {
 	var (
-		id string
-		ok bool
-	        rawbehavior AsyncTaskBehavior
-		v  = mux.Vars(r)
+		id          string
+		ok          bool
+		rawbehavior model.AsyncTaskBehavior
+		v           = mux.Vars(r)
 	)
 
 	if id, ok = v["id"]; !ok {
@@ -356,9 +371,9 @@ func (a *AsyncTasksApp) AddBehaviorRequest(writer http.ResponseWriter, r *http.R
 		errored(writer, err.Error())
 		return
 	}
-	defer tx.tx.Rollback()
+	defer tx.Rollback()
 
-	task, err := tx.GetTask(id)
+	task, err := tx.GetTask(id, true)
 	if err != nil {
 		errored(writer, err.Error())
 		return
@@ -390,7 +405,7 @@ func (a *AsyncTasksApp) AddBehaviorRequest(writer http.ResponseWriter, r *http.R
 		return
 	}
 
-	tx.tx.Commit()
+	tx.Commit()
 
 	url, _ := a.router.Get("getById").URL("id", id)
 	log.Info(url)
