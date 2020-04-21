@@ -243,7 +243,7 @@ func (t *DBTx) GetTaskBehaviors(id string, forUpdate bool) ([]model.AsyncTaskBeh
 
 // GetTaskStatuses fetches a tasks's list of statuses from the DB by ID, ordered by creation date
 func (t *DBTx) GetTaskStatuses(id string, forUpdate bool) ([]model.AsyncTaskStatus, error) {
-	query := `SELECT status, created_date at time zone (select current_setting('TIMEZONE')) AS created_date
+	query := `SELECT status, detail, created_date at time zone (select current_setting('TIMEZONE')) AS created_date
 	            FROM async_task_status WHERE async_task_id::text = $1 ORDER BY created_date ASC`
 
 	if forUpdate {
@@ -259,7 +259,7 @@ func (t *DBTx) GetTaskStatuses(id string, forUpdate bool) ([]model.AsyncTaskStat
 	var statuses []model.AsyncTaskStatus
 	for rows.Next() {
 		var status model.AsyncTaskStatus
-		if err := rows.Scan(&status.Status, &status.CreatedDate); err != nil {
+		if err := rows.Scan(&status.Status, &status.Detail, &status.CreatedDate); err != nil {
 			return nil, err
 		}
 
@@ -501,10 +501,11 @@ func (t *DBTx) InsertTaskStatus(status model.AsyncTaskStatus, taskID string) err
 
 	args = append(args, taskID)
 	args = append(args, status.Status)
+	args = append(args, status.Detail)
 	if status.CreatedDate.IsZero() {
-		query = `INSERT INTO async_task_status (async_task_id, status, created_date) VALUES ($1, $2, now())`
+		query = `INSERT INTO async_task_status (async_task_id, status, detail, created_date) VALUES ($1, $2, $3, now())`
 	} else {
-		query = `INSERT INTO async_task_status (async_task_id, status, created_date) VALUES ($1, $2, $3 AT TIME ZONE (select current_setting('TIMEZONE')))`
+		query = `INSERT INTO async_task_status (async_task_id, status, detail, created_date) VALUES ($1, $2, $3, $4 AT TIME ZONE (select current_setting('TIMEZONE')))`
 		args = append(args, status.CreatedDate)
 	}
 

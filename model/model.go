@@ -15,6 +15,7 @@ type AsyncTaskBehavior struct {
 // AsyncTaskStatus describes a single status update from the database
 type AsyncTaskStatus struct {
 	Status      string    `json:"status"`
+	Detail      string    `json:"detail,omitempty"`
 	CreatedDate time.Time `json:"created_date"`
 }
 
