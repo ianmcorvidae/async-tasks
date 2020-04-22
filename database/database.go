@@ -258,9 +258,15 @@ func (t *DBTx) GetTaskStatuses(id string, forUpdate bool) ([]model.AsyncTaskStat
 
 	var statuses []model.AsyncTaskStatus
 	for rows.Next() {
-		var status model.AsyncTaskStatus
-		if err := rows.Scan(&status.Status, &status.Detail, &status.CreatedDate); err != nil {
+		var dbstatus model.DBTaskStatus
+		if err := rows.Scan(&dbstatus.Status, &dbstatus.Detail, &dbstatus.CreatedDate); err != nil {
 			return nil, err
+		}
+
+		status := model.AsyncTaskStatus{Status: dbstatus.Status, CreatedDate: dbstatus.CreatedDate}
+
+		if dbstatus.Detail.Valid {
+			status.Detail = dbstatus.Detail.String
 		}
 
 		statuses = append(statuses, status)

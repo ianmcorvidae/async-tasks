@@ -37,6 +37,13 @@ type DBTaskBehavior struct {
 	Data         sql.NullString
 }
 
+// DBTaskStatus is a special type for selectiong from the DB
+type DBTaskStatus struct {
+	Status      string
+	Detail      sql.NullString
+	CreatedDate time.Time
+}
+
 // DBTask is a special type for selecting from the DB
 type DBTask struct {
 	ID        string
