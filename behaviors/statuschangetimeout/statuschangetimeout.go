@@ -15,6 +15,7 @@ type StatusChangeTimeoutData struct {
 	EndStatus   string `mapstructure:"end_status"`
 	Timeout     string `mapstructure:"timeout"`
 	Complete    bool   `mapstructure:"complete"`
+	Delete      bool   `mapstructure:"delete"`
 }
 
 func processSingleTask(ctx context.Context, log *logrus.Entry, db *database.DBConnection, ID string) error {
@@ -91,12 +92,21 @@ func processSingleTask(ctx context.Context, log *logrus.Entry, db *database.DBCo
 						err = tx.CompleteTask(ID)
 						if err != nil {
 							// do die here, because the transaction is probably dead
-							err = errors.Wrap(err, "failed inserting task status")
+							err = errors.Wrap(err, "failed setting task complete")
 							log.Error(err)
 							return err
 						}
 					}
-					log.Infof("Updated task with time %s and timeout %s from '%s' to '%s', set complete: %t", comparisonTimestamp, timeout, comparisonStatus, taskData.EndStatus, taskData.Complete)
+					if taskData.Delete {
+						err = tx.DeleteTask(ID)
+						if err != nil {
+							// do die here, because the transaction is probably dead
+							err = errors.Wrap(err, "failed deleting task")
+							log.Error(err)
+							return err
+						}
+					}
+					log.Infof("Updated task with time %s and timeout %s from '%s' to '%s', set complete: %t, deleted: %t", comparisonTimestamp, timeout, comparisonStatus, taskData.EndStatus, taskData.Complete, taskData.Delete)
 				} else {
 					log.Infof("Task was not ready to update given time %s, timeout %s, and status '%s'", comparisonTimestamp, timeout, comparisonStatus)
 				}
