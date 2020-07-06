@@ -79,6 +79,10 @@ func main() {
 	}
 	log.Infof("There are %d async tasks in the database", count)
 
+	// Make plugin/hook handler
+	hooks := NewHooksManager(db)
+	hooks.Run(context.Background(), "startup", nil)
+
 	// Make periodic updater
 	updater := NewAsyncTasksUpdater(db)
 	updater.AddBehavior("statuschangetimeout", statuschangetimeout.Processor)
