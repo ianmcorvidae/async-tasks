@@ -198,7 +198,7 @@ func (a *AsyncTasksApp) GetByFilterRequest(writer http.ResponseWriter, r *http.R
 	}
 	defer tx.Rollback()
 
-	tasks, err := tx.GetTasksByFilter(filters)
+	tasks, err := tx.GetTasksByFilter(filters, "")
 
 	jsoned, err := json.Marshal(tasks)
 	if err != nil {

@@ -65,7 +65,7 @@ func checkOldest(ctx context.Context, behaviorType string, db *database.DBConnec
 		IncludeNullEnd: true,
 	}
 
-	tasks, err := tx.GetTasksByFilter(filter)
+	tasks, err := tx.GetTasksByFilter(filter, "start_date ASC")
 	if err != nil {
 		return err
 	}
@@ -77,6 +77,9 @@ func checkOldest(ctx context.Context, behaviorType string, db *database.DBConnec
 		if oldestTime == nil || oldestTime.IsZero() || task.StartDate.Before(*oldestTime) {
 			oldestTime = task.StartDate
 			isOldest = (task.ID == taskID)
+			if !isOldest {
+				break
+			}
 		}
 	}
 
@@ -97,13 +100,14 @@ func checkAlone(ctx context.Context, behaviorType string, db *database.DBConnect
 	return id, checkOldest(ctx, behaviorType, db, id)
 }
 
-func finishTask(ctx context.Context, taskID string, db *database.DBConnection) error {
+func finishTask(ctx context.Context, taskID string, db *database.DBConnection, processorLog *logrus.Entry) error {
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
 
+	processorLog.Infof("Completing task %s", taskID)
 	err = tx.CompleteTask(taskID)
 	if err != nil {
 		return err
@@ -128,7 +132,7 @@ func (u *AsyncTasksUpdater) DoPeriodicUpdate(ctx context.Context, tickerTime tim
 			// check if alone
 			taskID, err := checkAlone(ctx, behaviorType, db)
 			if taskID != "" {
-				defer finishTask(ctx, taskID, db)
+				defer finishTask(ctx, taskID, db, processorLog)
 			}
 			if err != nil {
 				processorLog.Error(errors.Wrap(err, "We are not the oldest process for this behavior type"))

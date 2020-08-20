@@ -52,7 +52,7 @@ func processSingleTask(ctx context.Context, log *logrus.Entry, db *database.DBCo
 		}
 	}
 
-	log.Infof("Most recent timestamp for task: %s", comparisonTimestamp)
+	log.Infof("Most recent timestamp for task %s: %s", ID, comparisonTimestamp)
 
 	for _, behavior := range fullTask.Behaviors {
 		// only one of each type because of the DB FK
@@ -130,7 +130,7 @@ func Processor(ctx context.Context, log *logrus.Entry, _ time.Time, db *database
 	}
 	defer tx.Rollback()
 
-	tasks, err := tx.GetTasksByFilter(filter)
+	tasks, err := tx.GetTasksByFilter(filter, "end_date IS NOT NULL DESC")
 	if err != nil {
 		return err
 	}
@@ -139,11 +139,13 @@ func Processor(ctx context.Context, log *logrus.Entry, _ time.Time, db *database
 
 	log.Infof("Tasks with statuschangetimeout behavior: %d", len(tasks))
 
+ProcessLoop:
 	for _, task := range tasks {
 		select {
 		// If the context is cancelled, don't bother
 		case <-ctx.Done():
-			continue
+			log.Info("Not continuing to process tasks due to a canceled context.")
+			break ProcessLoop
 		default:
 		}
 
