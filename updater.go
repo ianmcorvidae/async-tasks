@@ -116,6 +116,22 @@ func finishTask(ctx context.Context, taskID string, db *database.DBConnection, p
 	return tx.Commit()
 }
 
+func deleteTask(ctx context.Context, taskID string, db *database.DBConnection, processorLog *logrus.Entry) error {
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	processorLog.Infof("Deleting task %s", taskID)
+	err = tx.DeleteTask(taskID)
+	if err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
 func (u *AsyncTasksUpdater) DoPeriodicUpdate(ctx context.Context, tickerTime time.Time, db *database.DBConnection) error {
 	log.Infof("Running update with time %s", tickerTime)
 
@@ -131,12 +147,18 @@ func (u *AsyncTasksUpdater) DoPeriodicUpdate(ctx context.Context, tickerTime tim
 			})
 			// check if alone
 			taskID, err := checkAlone(ctx, behaviorType, db)
-			if taskID != "" {
-				defer finishTask(context.Background(), taskID, db, processorLog) // This uses a second context so an already-canceled one will still end the behavior processor async-task
-			}
 			if err != nil {
 				processorLog.Error(errors.Wrap(err, "We are not the oldest process for this behavior type"))
+				if taskID != "" {
+					err = deleteTask(ctx, taskID, db, processorLog)
+					if err != nil {
+						processorLog.Error(errors.Wrap(err, "Failed to delete task"))
+					}
+				}
 				return
+			}
+			if taskID != "" {
+				defer finishTask(context.Background(), taskID, db, processorLog) // This uses a second context so an already-canceled one will still end the behavior processor async-task
 			}
 
 			processorLog.Infof("Processing behavior type %s for time %s (task ID %s)", behaviorType, tickerTime, taskID)

@@ -105,6 +105,7 @@ func main() {
 	router := makeRouter()
 
 	app := NewAsyncTasksApp(db, router)
+	log.Debug(app)
 
 	log.Infof("Starting to listen on port %s", *port)
 	log.Fatal(http.ListenAndServe(fixAddr(*port), router))
