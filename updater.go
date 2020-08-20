@@ -132,7 +132,7 @@ func (u *AsyncTasksUpdater) DoPeriodicUpdate(ctx context.Context, tickerTime tim
 			// check if alone
 			taskID, err := checkAlone(ctx, behaviorType, db)
 			if taskID != "" {
-				defer finishTask(ctx, taskID, db, processorLog)
+				defer finishTask(context.Background(), taskID, db, processorLog) // This uses a second context so an already-canceled one will still end the behavior processor async-task
 			}
 			if err != nil {
 				processorLog.Error(errors.Wrap(err, "We are not the oldest process for this behavior type"))
