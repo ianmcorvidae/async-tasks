@@ -58,8 +58,6 @@ func (a *AsyncTasksApp) GetByIdRequest(writer http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	log.Infof("Fetching async task %s", id)
-
 	tx, err := a.db.BeginTx(context.TODO(), nil)
 	if err != nil {
 		errored(writer, err.Error())
@@ -77,8 +75,6 @@ func (a *AsyncTasksApp) GetByIdRequest(writer http.ResponseWriter, r *http.Reque
 		notFound(writer, "not found")
 		return
 	}
-
-	log.Info(task)
 
 	jsoned, err := json.Marshal(task)
 	if err != nil {
@@ -102,8 +98,6 @@ func (a *AsyncTasksApp) DeleteByIdRequest(writer http.ResponseWriter, r *http.Re
 		badRequest(writer, "No ID in URL")
 		return
 	}
-
-	log.Infof("Fetching async task %s", id)
 
 	tx, err := a.db.BeginTx(context.TODO(), nil)
 	if err != nil {
@@ -263,12 +257,9 @@ func (a *AsyncTasksApp) CreateTaskRequest(writer http.ResponseWriter, r *http.Re
 		return
 	}
 
-	log.Info(id)
-
 	tx.Commit()
 
 	url, _ := a.router.Get("getById").URL("id", id)
-	log.Info(url)
 
 	writer.Header().Set("Location", url.EscapedPath())
 	writer.WriteHeader(http.StatusCreated)
@@ -293,7 +284,6 @@ func (a *AsyncTasksApp) AddStatusRequest(writer http.ResponseWriter, r *http.Req
 		complete = true
 	}
 
-	log.Infof("Fetching async task %s", id)
 
 	tx, err := a.db.BeginTx(context.TODO(), nil)
 	if err != nil {
@@ -345,7 +335,6 @@ func (a *AsyncTasksApp) AddStatusRequest(writer http.ResponseWriter, r *http.Req
 	tx.Commit()
 
 	url, _ := a.router.Get("getById").URL("id", id)
-	log.Info(url)
 
 	writer.Header().Set("Location", url.EscapedPath())
 	writer.WriteHeader(http.StatusCreated)
@@ -363,8 +352,6 @@ func (a *AsyncTasksApp) AddBehaviorRequest(writer http.ResponseWriter, r *http.R
 		badRequest(writer, "No ID in URL")
 		return
 	}
-
-	log.Infof("Fetching async task %s", id)
 
 	tx, err := a.db.BeginTx(context.TODO(), nil)
 	if err != nil {
@@ -408,7 +395,6 @@ func (a *AsyncTasksApp) AddBehaviorRequest(writer http.ResponseWriter, r *http.R
 	tx.Commit()
 
 	url, _ := a.router.Get("getById").URL("id", id)
-	log.Info(url)
 
 	writer.Header().Set("Location", url.EscapedPath())
 	writer.WriteHeader(http.StatusCreated)

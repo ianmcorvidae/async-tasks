@@ -290,8 +290,6 @@ type TaskFilter struct {
 
 // GetTasksByFilter fetches a set of tasks by a set of provided filters
 func (t *DBTx) GetTasksByFilter(filters TaskFilter, order string) ([]model.AsyncTask, error) {
-	t.log.Info(filters)
-
 	var tasks []model.AsyncTask
 	var args []interface{}
 	var wheres []string
