@@ -91,8 +91,8 @@ var psql squirrel.StatementBuilderType = squirrel.StatementBuilder.PlaceholderFo
 
 var baseTaskSelect squirrel.SelectBuilder = psql.Select(
 	"id", "type", "username", "data",
-	"start_date at time zone (select current_setting('TIMEZONE') AS start_date)",
-	"end_date at time zone (select current_setting('TIMEZONE')) AS end_date",
+	"start_date at time zone (select current_setting('TIMEZONE'))",
+	"end_date at time zone (select current_setting('TIMEZONE'))",
 ).From("async_tasks")
 
 // GetBaseTask fetches a task from the database by ID (sans behaviors/statuses)
@@ -249,7 +249,7 @@ func (t *DBTx) GetTaskBehaviors(id string, forUpdate bool) ([]model.AsyncTaskBeh
 }
 
 var baseTaskStatusSelect squirrel.SelectBuilder = psql.Select(
-	"status", "detail", "created_date at time zone (select current_setting('TIMEZONE')) AS created_date",
+	"status", "detail", "created_date at time zone (select current_setting('TIMEZONE'))",
 ).From("async_task_status")
 
 // GetTaskStatuses fetches a tasks's list of statuses from the DB by ID, ordered by creation date
