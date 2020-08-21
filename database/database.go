@@ -353,8 +353,13 @@ func (t *DBTx) GetTasksByFilter(filters TaskFilter, order string) ([]model.Async
 	}
 
 	if len(filters.BehaviorTypes) > 0 {
-		query = query.Join("(SELECT async_task_id, ARRAY_AGG(behavior_type) AS behavior_types FROM async_task_behavior GROUP BY async_task_id) AS behaviors ON (behaviors.async_task_id = async_tasks.id)").Where(`behavior_types && ?`, pq.Array(filters.BehaviorTypes))
+		nested := psql.Select("async_task_id", "ARRAY_AGG(behavior_type) AS behavior_types").From("async_task_behavior").GroupBy("async_task_id")
+		nestedJoinSelect, _, _ := nested.ToSql()
+		query = query.Join("(" + nestedJoinSelect + ") AS behaviors ON (behaviors.async_task_id = async_tasks.id)").Where(`behavior_types && ?`, pq.Array(filters.BehaviorTypes))
 	}
+
+	s, _, _ := query.ToSql()
+	t.log.Info(s)
 
 	rows, err := query.RunWith(t.tx).Query()
 	if err != nil {
