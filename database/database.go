@@ -89,7 +89,9 @@ func (t *DBTx) Commit() error {
 	return t.tx.Commit()
 }
 
-var baseTaskSelect squirrel.SelectBuilder = squirrel.Select(
+var psql squirrel.StatementBuilderType = squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
+
+var baseTaskSelect squirrel.SelectBuilder = psql.Select(
 	"id", "type", "username", "data",
 	"start_date at time zone (select current_setting('TIMEZONE') AS start_date)",
 	"end_date at time zone (select current_setting('TIMEZONE')) AS end_date",
@@ -97,7 +99,7 @@ var baseTaskSelect squirrel.SelectBuilder = squirrel.Select(
 
 // GetBaseTask fetches a task from the database by ID (sans behaviors/statuses)
 func (t *DBTx) GetBaseTask(id string, forUpdate bool) (*model.AsyncTask, error) {
-	query := baseTaskSelect.PlaceholderFormat(squirrel.Dollar).Where("id::text = ?", id)
+	query := baseTaskSelect.Where("id::text = ?", id)
 
 	if forUpdate {
 		query = query.Suffix(" FOR UPDATE")
@@ -205,13 +207,13 @@ func (t *DBTx) GetTask(id string, forUpdate bool) (*model.AsyncTask, error) {
 	return task, err
 }
 
-var baseTaskBehaviorSelect squirrel.SelectBuilder = squirrel.Select(
+var baseTaskBehaviorSelect squirrel.SelectBuilder = psql.Select(
 	"behavior_type", "data",
 ).From("async_task_behavior")
 
 // GetTaskBehaviors fetches a task's set of behaviors from the DB by ID
 func (t *DBTx) GetTaskBehaviors(id string, forUpdate bool) ([]model.AsyncTaskBehavior, error) {
-	query := baseTaskBehaviorSelect.PlaceholderFormat(squirrel.Dollar).Where("async_task_id::text = ?", id)
+	query := baseTaskBehaviorSelect.Where("async_task_id::text = ?", id)
 
 	if forUpdate {
 		query = query.Suffix(" FOR UPDATE")
@@ -248,13 +250,13 @@ func (t *DBTx) GetTaskBehaviors(id string, forUpdate bool) ([]model.AsyncTaskBeh
 	return behaviors, nil
 }
 
-var baseTaskStatusSelect squirrel.SelectBuilder = squirrel.Select(
+var baseTaskStatusSelect squirrel.SelectBuilder = psql.Select(
 	"status", "detail", "created_date at time zone (select current_setting('TIMEZONE')) AS created_date",
 ).From("async_task_status")
 
 // GetTaskStatuses fetches a tasks's list of statuses from the DB by ID, ordered by creation date
 func (t *DBTx) GetTaskStatuses(id string, forUpdate bool) ([]model.AsyncTaskStatus, error) {
-	query := baseTaskStatusSelect.PlaceholderFormat(squirrel.Dollar).Where("async_task_id::text = ?", id).OrderBy("created_date ASC")
+	query := baseTaskStatusSelect.Where("async_task_id::text = ?", id).OrderBy("created_date ASC")
 
 	if forUpdate {
 		query = query.Suffix(" FOR UPDATE")
@@ -302,7 +304,7 @@ type TaskFilter struct {
 func (t *DBTx) GetTasksByFilter(filters TaskFilter, order string) ([]model.AsyncTask, error) {
 	var tasks []model.AsyncTask
 
-	query := baseTaskSelect.PlaceholderFormat(squirrel.Dollar)
+	query := baseTaskSelect
 
 	if len(filters.IDs) > 0 {
 		query = query.Where("id::text = ANY(?)", pq.Array(filters.IDs))
@@ -475,24 +477,19 @@ func (t *DBTx) InsertTask(task model.AsyncTask) (string, error) {
 
 // InsertTaskStatus inserts a provided AsyncTaskStatus into the DB for the provided async task ID
 func (t *DBTx) InsertTaskStatus(status model.AsyncTaskStatus, taskID string) error {
-	var query string
-	var args []interface{}
-
 	if status.Status == "" {
 		return errors.New("Status type must be provided")
 	}
 
-	args = append(args, taskID)
-	args = append(args, status.Status)
-	args = append(args, status.Detail)
+	query := psql.Insert("async_task_status").Columns("async_task_id", "status", "detail", "created_date")
+
 	if status.CreatedDate.IsZero() {
-		query = `INSERT INTO async_task_status (async_task_id, status, detail, created_date) VALUES ($1, $2, $3, now())`
+		query = query.Values(taskID, status.Status, status.Detail, squirrel.Expr("now()"))
 	} else {
-		query = `INSERT INTO async_task_status (async_task_id, status, detail, created_date) VALUES ($1, $2, $3, $4 AT TIME ZONE (select current_setting('TIMEZONE')))`
-		args = append(args, status.CreatedDate)
+		query = query.Values(taskID, status.Status, status.Detail, squirrel.Expr("? AT TIME ZONE (select current_setting('TIMEZONE'))", status.CreatedDate))
 	}
 
-	rows, err := t.tx.Query(query, args...)
+	rows, err := query.RunWith(t.tx).Query()
 	if err != nil {
 		return err
 	}
@@ -508,28 +505,23 @@ func (t *DBTx) InsertTaskStatus(status model.AsyncTaskStatus, taskID string) err
 
 // InsertTaskBehavior inserts a provided AsyncTaskBehavior into the DB for the provided async task ID
 func (t *DBTx) InsertTaskBehavior(behavior model.AsyncTaskBehavior, taskID string) error {
-	var query string
-	var args []interface{}
-
 	if behavior.BehaviorType == "" {
 		return errors.New("Behavior type must be provided")
 	}
 
-	args = append(args, taskID)
-	args = append(args, behavior.BehaviorType)
+	query := psql.Insert("async_task_behavior")
 
 	if len(behavior.Data) > 0 {
-		query = `INSERT INTO async_task_behavior (async_task_id, behavior_type, data) VALUES ($1, $2, $3)`
 		jsoned, err := json.Marshal(behavior.Data)
 		if err != nil {
 			return err
 		}
-		args = append(args, jsoned)
+		query = query.Columns("async_task_id", "behavior_type", "data").Values(taskID, behavior.BehaviorType, jsoned)
 	} else {
-		query = `INSERT INTO async_task_behavior (async_task_id, behavior_type) VALUES ($1, $2)`
+		query = query.Columns("async_task_id", "behavior_type").Values(taskID, behavior.BehaviorType)
 	}
 
-	rows, err := t.tx.Query(query, args...)
+	rows, err := query.RunWith(t.tx).Query()
 	if err != nil {
 		return err
 	}
