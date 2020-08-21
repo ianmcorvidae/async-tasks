@@ -10,9 +10,7 @@ import (
 	"github.com/lib/pq"
 
 	"errors"
-	"fmt"
 	"github.com/sirupsen/logrus"
-	"strings"
 	"time"
 
 	"encoding/json"
@@ -157,9 +155,9 @@ func makeTask(dbtask model.DBTask) (*model.AsyncTask, error) {
 
 // DeleteTask deletes a task from the database by ID
 func (t *DBTx) DeleteTask(id string) error {
-	query := `DELETE FROM async_tasks WHERE id::text = $1`
+	query := psql.Delete("async_tasks").Where("id::text = ?", id)
 
-	_, err := t.tx.Exec(query, id)
+	_, err := query.RunWith(t.tx).Exec()
 	if err != nil {
 		return err
 	}
@@ -169,9 +167,9 @@ func (t *DBTx) DeleteTask(id string) error {
 
 // CompleteTask marks a task as ended by setting the end date to now()
 func (t *DBTx) CompleteTask(id string) error {
-	query := `UPDATE async_tasks SET end_date = now() WHERE id = $1`
+	query := psql.Update("async_tasks").Set("end_date", squirrel.Expr("now()")).Where("id::text = ?", id)
 
-	rows, err := t.tx.Query(query, id)
+	rows, err := query.RunWith(t.tx).Query()
 	if err != nil {
 		return err
 	}
@@ -387,25 +385,21 @@ func (t *DBTx) GetTasksByFilter(filters TaskFilter, order string) ([]model.Async
 
 // InsertTask inserts a provided AsyncTask into the DB and returns the task's generated ID as a string
 func (t *DBTx) InsertTask(task model.AsyncTask) (string, error) {
-	var columns []string
-	var placeholders []string
-	var args []interface{}
-
-	currentIndex := 1
-
 	if task.Type == "" {
 		return "", errors.New("Task type must be provided")
 	}
+
+	query := psql.Insert("async_tasks").Suffix("RETURNING id::text")
+
+	var columns []string
+	var args []interface{}
+
 	columns = append(columns, "type")
-	placeholders = append(placeholders, fmt.Sprintf("$%d", currentIndex))
 	args = append(args, task.Type)
-	currentIndex = currentIndex + 1
 
 	if task.Username != "" {
 		columns = append(columns, "username")
-		placeholders = append(placeholders, fmt.Sprintf("$%d", currentIndex))
 		args = append(args, task.Username)
-		currentIndex = currentIndex + 1
 	}
 
 	if len(task.Data) > 0 {
@@ -415,31 +409,25 @@ func (t *DBTx) InsertTask(task model.AsyncTask) (string, error) {
 		}
 
 		columns = append(columns, "data")
-		placeholders = append(placeholders, fmt.Sprintf("$%d", currentIndex))
 		args = append(args, jsoned)
-		currentIndex = currentIndex + 1
 	}
 
 	if task.StartDate == nil || task.StartDate.IsZero() {
 		columns = append(columns, "start_date")
-		placeholders = append(placeholders, "now()")
+		args = append(args, squirrel.Expr("now()"))
 	} else {
 		columns = append(columns, "start_date")
-		placeholders = append(placeholders, fmt.Sprintf("$%d AT TIME ZONE (select current_setting('TIMEZONE'))", currentIndex))
-		args = append(args, task.StartDate)
-		currentIndex = currentIndex + 1
+		args = append(args, squirrel.Expr("? AT TIME ZONE (select current_setting('TIMEZONE'))", task.StartDate))
 	}
 
 	if task.EndDate != nil && !task.EndDate.IsZero() {
 		columns = append(columns, "end_date")
-		placeholders = append(placeholders, fmt.Sprintf("$%d AT TIME ZONE (select current_setting('TIMEZONE'))", currentIndex))
-		args = append(args, task.EndDate)
-		currentIndex = currentIndex + 1
+		args = append(args, squirrel.Expr("? AT TIME ZONE (select current_setting('TIMEZONE'))", task.EndDate))
 	}
 
-	query := fmt.Sprintf(`INSERT INTO async_tasks (%s) VALUES (%s) RETURNING id::text`, strings.Join(columns, ", "), strings.Join(placeholders, ", "))
+	query = query.Columns(columns...).Values(args...)
 
-	rows, err := t.tx.Query(query, args...)
+	rows, err := query.RunWith(t.tx).Query()
 	if err != nil {
 		return "", err
 	}
