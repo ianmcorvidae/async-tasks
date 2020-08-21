@@ -358,9 +358,6 @@ func (t *DBTx) GetTasksByFilter(filters TaskFilter, order string) ([]model.Async
 		query = query.Join("(" + nestedJoinSelect + ") AS behaviors ON (behaviors.async_task_id = async_tasks.id)").Where(`behavior_types && ?`, pq.Array(filters.BehaviorTypes))
 	}
 
-	s, _, _ := query.ToSql()
-	t.log.Info(s)
-
 	rows, err := query.RunWith(t.tx).Query()
 	if err != nil {
 		return nil, err
