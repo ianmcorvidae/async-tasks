@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"database/sql"
+	"github.com/Masterminds/squirrel"
 	"github.com/cyverse-de/async-tasks/model"
 	"github.com/cyverse-de/dbutil"
 	"github.com/lib/pq"
@@ -61,9 +62,8 @@ func (d *DBConnection) Close() error {
 
 // GetCount gets a count of async tasks in the DB
 func (d *DBConnection) GetCount() (int64, error) {
-	row := d.db.QueryRow("SELECT COUNT(*) FROM async_tasks")
 	var res struct{ count int64 }
-	err := row.Scan(&res.count)
+	err := squirrel.Select("COUNT(*)").From("async_tasks").RunWith(d.db).QueryRow().Scan(&res.count)
 	if err != nil {
 		return 0, err
 	}
@@ -89,18 +89,21 @@ func (t *DBTx) Commit() error {
 	return t.tx.Commit()
 }
 
+var baseTaskSelect squirrel.SelectBuilder = squirrel.Select(
+	"id", "type", "username", "data",
+	"start_date at time zone (select current_setting('TIMEZONE') AS start_date)",
+	"end_date at time zone (select current_setting('TIMEZONE')) AS end_date",
+).From("async_tasks")
+
 // GetBaseTask fetches a task from the database by ID (sans behaviors/statuses)
 func (t *DBTx) GetBaseTask(id string, forUpdate bool) (*model.AsyncTask, error) {
-	query := `SELECT id, type, username, data,
-	                 start_date at time zone (select current_setting('TIMEZONE')) AS start_date,
-			 end_date at time zone (select current_setting('TIMEZONE')) AS end_date
-	            FROM async_tasks WHERE id::text = $1`
+	query := baseTaskSelect.PlaceholderFormat(squirrel.Dollar).Where("id::text = ?", id)
 
 	if forUpdate {
-		query = query + ` FOR UPDATE`
+		query = query.Suffix(" FOR UPDATE")
 	}
 
-	rows, err := t.tx.Query(query, id)
+	rows, err := query.RunWith(t.tx).Query()
 	if err != nil {
 		return nil, err
 	}
@@ -202,15 +205,19 @@ func (t *DBTx) GetTask(id string, forUpdate bool) (*model.AsyncTask, error) {
 	return task, err
 }
 
+var baseTaskBehaviorSelect squirrel.SelectBuilder = squirrel.Select(
+	"behavior_type", "data",
+).From("async_task_behavior")
+
 // GetTaskBehaviors fetches a task's set of behaviors from the DB by ID
 func (t *DBTx) GetTaskBehaviors(id string, forUpdate bool) ([]model.AsyncTaskBehavior, error) {
-	query := `SELECT behavior_type, data FROM async_task_behavior WHERE async_task_id::text = $1`
+	query := baseTaskBehaviorSelect.PlaceholderFormat(squirrel.Dollar).Where("async_task_id::text = ?", id)
 
 	if forUpdate {
-		query = query + ` FOR UPDATE`
+		query = query.Suffix(" FOR UPDATE")
 	}
 
-	rows, err := t.tx.Query(query, id)
+	rows, err := query.RunWith(t.tx).Query()
 	if err != nil {
 		return nil, err
 	}
@@ -241,16 +248,19 @@ func (t *DBTx) GetTaskBehaviors(id string, forUpdate bool) ([]model.AsyncTaskBeh
 	return behaviors, nil
 }
 
+var baseTaskStatusSelect squirrel.SelectBuilder = squirrel.Select(
+	"status", "detail", "created_date at time zone (select current_setting('TIMEZONE')) AS created_date",
+).From("async_task_status")
+
 // GetTaskStatuses fetches a tasks's list of statuses from the DB by ID, ordered by creation date
 func (t *DBTx) GetTaskStatuses(id string, forUpdate bool) ([]model.AsyncTaskStatus, error) {
-	query := `SELECT status, detail, created_date at time zone (select current_setting('TIMEZONE')) AS created_date
-	            FROM async_task_status WHERE async_task_id::text = $1 ORDER BY created_date ASC`
+	query := baseTaskStatusSelect.PlaceholderFormat(squirrel.Dollar).Where("async_task_id::text = ?", id).OrderBy("created_date ASC")
 
 	if forUpdate {
-		query = query + ` FOR UPDATE`
+		query = query.Suffix(" FOR UPDATE")
 	}
 
-	rows, err := t.tx.Query(query, id)
+	rows, err := query.RunWith(t.tx).Query()
 	if err != nil {
 		return nil, err
 	}
@@ -291,50 +301,33 @@ type TaskFilter struct {
 // GetTasksByFilter fetches a set of tasks by a set of provided filters
 func (t *DBTx) GetTasksByFilter(filters TaskFilter, order string) ([]model.AsyncTask, error) {
 	var tasks []model.AsyncTask
-	var args []interface{}
-	var wheres []string
 
-	query := `SELECT id, type, username, data,
-	                 start_date at time zone (select current_setting('TIMEZONE')) AS start_date,
-			 end_date at time zone (select current_setting('TIMEZONE')) AS end_date
-	            FROM async_tasks`
-
-	currentIndex := 1
+	query := baseTaskSelect.PlaceholderFormat(squirrel.Dollar)
 
 	if len(filters.IDs) > 0 {
-		wheres = append(wheres, fmt.Sprintf(" id::text = ANY($%d)", currentIndex))
-		args = append(args, pq.Array(filters.IDs))
-		currentIndex = currentIndex + 1
+		query = query.Where("id::text = ANY(?)", pq.Array(filters.IDs))
 	}
 
 	if len(filters.Types) > 0 {
-		wheres = append(wheres, fmt.Sprintf(" type = ANY($%d)", currentIndex))
-		args = append(args, pq.Array(filters.Types))
-		currentIndex = currentIndex + 1
+		query = query.Where("type = ANY(?)", pq.Array(filters.Types))
 	}
 
 	if len(filters.Usernames) > 0 {
-		wheres = append(wheres, fmt.Sprintf(" username = ANY($%d)", currentIndex))
-		args = append(args, pq.Array(filters.Usernames))
-		currentIndex = currentIndex + 1
+		query = query.Where("username = ANY(?)", pq.Array(filters.Usernames))
 	}
 
 	if len(filters.StartDateSince) > 0 {
 		if len(filters.StartDateSince) > 1 {
 			t.log.Warn("More than one start_date_since filter is unsupported. Only the oldest date will be considered.")
 		}
-		wheres = append(wheres, fmt.Sprintf(" start_date > ANY($%d)", currentIndex))
-		args = append(args, pq.Array(filters.StartDateSince))
-		currentIndex = currentIndex + 1
+		query = query.Where("start_date > ANY(?)", pq.Array(filters.StartDateSince))
 	}
 
 	if len(filters.StartDateBefore) > 0 {
 		if len(filters.StartDateBefore) > 1 {
 			t.log.Warn("More than one start_date_before filter is unsupported. Only the newest date will be considered.")
 		}
-		wheres = append(wheres, fmt.Sprintf(" start_date < ANY($%d)", currentIndex))
-		args = append(args, pq.Array(filters.StartDateBefore))
-		currentIndex = currentIndex + 1
+		query = query.Where("start_date < ANY(?)", pq.Array(filters.StartDateBefore))
 	}
 
 	if len(filters.EndDateSince) > 0 {
@@ -342,42 +335,28 @@ func (t *DBTx) GetTasksByFilter(filters TaskFilter, order string) ([]model.Async
 			t.log.Warn("More than one end_date_since filter is unsupported. Only the oldest date will be considered.")
 		}
 		if filters.IncludeNullEnd {
-			wheres = append(wheres, fmt.Sprintf(" (end_date > ANY($%d) OR end_date IS NULL)", currentIndex))
+			query = query.Where("(end_date > ANY(?) OR end_date IS NULL)", pq.Array(filters.EndDateSince))
 		} else {
-			wheres = append(wheres, fmt.Sprintf(" end_date > ANY($%d)", currentIndex))
+			query = query.Where("end_date > ANY(?)", pq.Array(filters.EndDateSince))
 		}
-		args = append(args, pq.Array(filters.EndDateSince))
-		currentIndex = currentIndex + 1
 	}
 
 	if len(filters.EndDateBefore) > 0 {
 		if len(filters.EndDateBefore) > 1 {
 			t.log.Warn("More than one end_date_before filter is unsupported. Only the newest date will be considered.")
 		}
-		wheres = append(wheres, fmt.Sprintf(" end_date < ANY($%d)", currentIndex))
-		args = append(args, pq.Array(filters.EndDateBefore))
-		currentIndex = currentIndex + 1
+		query = query.Where("end_date < ANY(?)", pq.Array(filters.EndDateBefore))
 	}
 
 	if len(filters.Statuses) > 0 {
-		query = query + " JOIN async_task_status ON (async_task_status.async_task_id = async_tasks.id AND async_task_status.created_date = (select max(created_date) FROM async_task_status WHERE async_task_id = async_tasks.id))"
-		wheres = append(wheres, fmt.Sprintf(" status = ANY($%d)", currentIndex))
-		args = append(args, pq.Array(filters.Statuses))
-		currentIndex = currentIndex + 1
+		query = query.Join("async_task_status ON (async_task_status.async_task_id = async_tasks.id AND async_task_status.created_date = (select max(created_date) FROM async_task_status WHERE async_task_id = async_tasks.id))").Where("status = ANY(?)", pq.Array(filters.Statuses))
 	}
 
 	if len(filters.BehaviorTypes) > 0 {
-		query = query + " JOIN (SELECT async_task_id, ARRAY_AGG(behavior_type) AS behavior_types FROM async_task_behavior GROUP BY async_task_id) AS behaviors ON (behaviors.async_task_id = async_tasks.id)"
-		wheres = append(wheres, fmt.Sprintf(" behavior_types && $%d", currentIndex))
-		args = append(args, pq.Array(filters.BehaviorTypes))
-		currentIndex = currentIndex + 1
+		query = query.Join("(SELECT async_task_id, ARRAY_AGG(behavior_type) AS behavior_types FROM async_task_behavior GROUP BY async_task_id) AS behaviors ON (behaviors.async_task_id = async_tasks.id)").Where(`behavior_types && ?`, pq.Array(filters.BehaviorTypes))
 	}
 
-	if len(wheres) > 0 {
-		query = query + " WHERE " + strings.Join(wheres, " AND ")
-	}
-
-	rows, err := t.tx.Query(query, args...)
+	rows, err := query.RunWith(t.tx).Query()
 	if err != nil {
 		return nil, err
 	}
